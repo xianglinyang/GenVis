@@ -233,6 +233,7 @@ class Recommender:
     def __init__(self, uncertainty, embeddings_2d, cls_num, period):
         """ Recommend samples based on uncertainty and embeddings
         """
+        #TODO uncertainty need to be dynamics....
         self.uncertainty = uncertainty
         self.embeddings_2d = embeddings_2d
         train_num,time_steps, _ = embeddings_2d.shape

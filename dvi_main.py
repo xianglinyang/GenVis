@@ -22,6 +22,7 @@ from singleVis.data import NormalDataProvider
 from singleVis.spatial_edge_constructor import SingleEpochSpatialEdgeConstructor
 from singleVis.projector import DVIProjector
 from singleVis.eval.evaluator import Evaluator
+from singleVis.visualizer import visualizer
 from singleVis.utils import find_neighbor_preserving_rate
 ########################################################################################################################
 #                                                     DVI PARAMETERS                                                   #
@@ -54,6 +55,7 @@ GPU_ID = config["GPU"]
 EPOCH_START = config["EPOCH_START"]
 EPOCH_END = config["EPOCH_END"]
 EPOCH_PERIOD = config["EPOCH_PERIOD"]
+EPOCH_NAME = config["EPOCH_NAME"]
 
 # Training parameter (subject model)
 TRAINING_PARAMETER = config["TRAINING"]
@@ -86,7 +88,7 @@ net = eval("subject_model.{}()".format(NET))
 #                                                    TRAINING SETTING                                                  #
 ########################################################################################################################
 # Define data_provider
-data_provider = NormalDataProvider(CONTENT_PATH, net, EPOCH_START, EPOCH_END, EPOCH_PERIOD, device=DEVICE, classes=CLASSES,verbose=1)
+data_provider = NormalDataProvider(CONTENT_PATH, net, EPOCH_START, EPOCH_END, EPOCH_PERIOD, device=DEVICE, classes=CLASSES, epoch_name=EPOCH_NAME, verbose=1)
 if PREPROCESS:
     data_provider._meta_data()
     if B_N_EPOCHS >0:
@@ -103,7 +105,13 @@ umap_loss_fn = UmapLoss(negative_sample_rate, DEVICE, _a, _b, repulsion_strength
 recon_loss_fn = ReconstructionLoss(beta=1.0)
 single_loss_fn = SingleVisLoss(umap_loss_fn, recon_loss_fn, lambd=LAMBDA1)
 # Define Projector
-projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, device=DEVICE)
+projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, epoch_name=EPOCH_NAME, device=DEVICE)
+
+vis = visualizer(data_provider, projector, 200, "tab10")
+save_dir = os.path.join(data_provider.content_path, "img")
+if not os.path.exists(save_dir):
+    os.mkdir(save_dir)
+evaluator = Evaluator(data_provider, projector)
 
 start_flag = 1
 prev_model = VisModel(ENCODER_DIMS, DECODER_DIMS)
@@ -120,7 +128,7 @@ for iteration in range(EPOCH_START, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
         curr_data = data_provider.train_representation(iteration)
         npr = find_neighbor_preserving_rate(prev_data, curr_data, N_NEIGHBORS)
         temporal_loss_fn = TemporalLoss(w_prev, DEVICE)
-        criterion = DVILoss(umap_loss_fn, recon_loss_fn, temporal_loss_fn, lambd1=LAMBDA1, lambd2=LAMBDA2*npr)
+        criterion = DVILoss(umap_loss_fn, recon_loss_fn, temporal_loss_fn, lambd1=LAMBDA1, lambd2=LAMBDA2*npr.mean())
     # Define training parameters
     optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
@@ -165,37 +173,10 @@ for iteration in range(EPOCH_START, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
 
     print("Finish epoch {}...".format(iteration))
 
+    vis.savefig(iteration, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, iteration, VIS_METHOD)))
+    evaluator.save_epoch_eval(iteration, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
+
     prev_model.load_state_dict(model.state_dict())
     for param in prev_model.parameters():
         param.requires_grad = False
     w_prev = dict(prev_model.named_parameters())
-    
-
-########################################################################################################################
-#                                                      VISUALIZATION                                                   #
-########################################################################################################################
-
-from singleVis.visualizer import visualizer
-
-vis = visualizer(data_provider, projector, 200, "tab10")
-save_dir = os.path.join(data_provider.content_path, "img")
-if not os.path.exists(save_dir):
-    os.mkdir(save_dir)
-for i in range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD):
-    vis.savefig(i, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, i, VIS_METHOD)))
-
-    
-########################################################################################################################
-#                                                       EVALUATION                                                     #
-########################################################################################################################
-eval_epochs = range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD)
-EVAL_EPOCH_DICT = {
-    "mnist":[1,10,15],
-    "fmnist":[1,25,50],
-    "cifar10":[1,100,199]
-}
-eval_epochs = EVAL_EPOCH_DICT[DATASET]
-evaluator = Evaluator(data_provider, projector)
-
-for eval_epoch in eval_epochs:
-    evaluator.save_epoch_eval(eval_epoch, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))

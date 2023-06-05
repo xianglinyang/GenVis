@@ -194,11 +194,13 @@ class EvalProjector(DeepDebuggerProjector):
         
 
 class DVIProjector(Projector):
-    def __init__(self, vis_model, content_path, vis_model_name, device) -> None:
+    def __init__(self, vis_model, content_path, vis_model_name, epoch_name, device) -> None:
         super().__init__(vis_model, content_path, vis_model_name, device)
+        self.epoch_name = epoch_name
 
     def load(self, iteration):
-        file_path = os.path.join(self.content_path, "Model", "Epoch_{}".format(iteration), "{}.pth".format(self.vis_model_name))
+        file_path = os.path.join(self.content_path, "Model", "{}_{}".format(self.epoch_name, iteration), "{}.pth".format(self.vis_model_name))
+        print(file_path)
         save_model = torch.load(file_path, map_location="cpu")
         self.vis_model.load_state_dict(save_model["state_dict"])
         self.vis_model.to(self.DEVICE)

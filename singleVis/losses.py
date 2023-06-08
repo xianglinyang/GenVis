@@ -34,6 +34,8 @@ class UmapLoss(nn.Module):
 
     def forward(self, embedding_to, embedding_from):
         batch_size = embedding_to.shape[0]
+        if batch_size == 0:
+            return torch.tensor(0).to(dtype=torch.float32)
         # get negative samples
         embedding_neg_to = torch.repeat_interleave(embedding_to, self._negative_sample_rate, dim=0)
         repeat_neg = torch.repeat_interleave(embedding_from, self._negative_sample_rate, dim=0)
@@ -81,6 +83,7 @@ class ReconstructionLoss(nn.Module):
         # loss1 = torch.mean(torch.mean(torch.pow(edge_to - recon_to, 2), 1))
         # loss2 = torch.mean(torch.mean(torch.pow(edge_from - recon_from, 2), 1))
         return (loss1 + loss2)/2
+        # return loss1
 
 
 class SmoothnessLoss(nn.Module):
@@ -111,6 +114,7 @@ class SingleVisLoss(nn.Module):
         loss = umap_l + self.lambd * recon_l
 
         return umap_l, recon_l, loss
+
 
 class HybridLoss(nn.Module):
     def __init__(self, umap_loss, recon_loss, smooth_loss, lambd1, lambd2):
@@ -187,6 +191,35 @@ class DVILoss(nn.Module):
         loss = umap_l + self.lambd1 * recon_l + self.lambd2 * temporal_l
 
         return umap_l, self.lambd1 *recon_l, self.lambd2 *temporal_l, loss
+
+
+class LocalTemporalLoss(nn.Module):
+    def __init__(self, umap_loss, recon_loss, lambd):
+        super(LocalTemporalLoss, self).__init__()
+        self.umap_loss = umap_loss
+        self.recon_loss = recon_loss
+        self.lambd = lambd
+
+    def forward(self, edge_to, edge_from, a_to, a_from, coef, embedded_from, outputs):
+        embedding_to, embedding_from = outputs["umap"]
+        recon_to, recon_from = outputs["recon"]
+
+        recon_l  = torch.mean(torch.mean(torch.multiply(torch.pow((1+a_to), 1), torch.pow(edge_to - recon_to, 2)), 1))
+        # recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from, a_to, a_from)
+        # recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from)
+
+        # split embedding into two pools, grad_required and stop gradient
+        embedding_to_grad = embedding_to[~coef]
+        embedding_from_grad = embedding_from[~coef]
+        embedding_to_no_grad = embedding_to[coef]
+        embedding_from_no_grad = embedding_from[coef].detach()
+
+        umap_l_s = self.umap_loss(embedding_to_grad, embedding_from_grad) 
+        umap_l_t = self.umap_loss(embedding_to_no_grad, embedding_from_no_grad)
+
+        loss = umap_l_s + umap_l_t  + self.lambd * recon_l
+
+        return umap_l_s, umap_l_t, recon_l, loss
 
 
 import tensorflow as tf

@@ -309,3 +309,59 @@ class DVITrainer(SingleVisTrainer):
         evaluation[operation][iteration] = round(t, 3)
         with open(save_file, 'w') as f:
             json.dump(evaluation, f)
+
+class LocalTemporalTrainer(SingleVisTrainer):
+    def __init__(self, model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE):
+        super().__init__(model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE)
+    
+    def train_step(self):
+        self.model = self.model.to(device=self.DEVICE)
+        self.model.train()
+        all_loss = []
+        umap_s_losses = []
+        umap_t_losses = []
+        recon_losses = []
+
+        t = tqdm(self.edge_loader, leave=True, total=len(self.edge_loader))
+        
+        for data in t:
+            edge_to, edge_from, a_to, a_from, coeffi_from, embedded_from = data
+
+            edge_to = edge_to.to(device=self.DEVICE, dtype=torch.float32)
+            edge_from = edge_from.to(device=self.DEVICE, dtype=torch.float32)
+            a_to = a_to.to(device=self.DEVICE, dtype=torch.float32)
+            a_from = a_from.to(device=self.DEVICE, dtype=torch.float32)
+            coeffi_from = coeffi_from.to(device=self.DEVICE, dtype=torch.bool)
+            embedded_from = embedded_from.to(device=self.DEVICE, dtype=torch.float32)
+
+            # embedded_from[coeffi_from.to(torch.bool)].requires_grad = False
+
+            outputs = self.model(edge_to, edge_from)
+            umap_l_s, umap_l_t, recon_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, coeffi_from, embedded_from, outputs)
+            all_loss.append(loss.item())
+            umap_s_losses.append(umap_l_s.item())
+            umap_t_losses.append(umap_l_t.item())
+            recon_losses.append(recon_l.item())
+            # ===================backward====================
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+        self._loss = sum(all_loss) / len(all_loss)
+        self.model.eval()
+        print(f'umap spatial:{sum(umap_s_losses) / len(umap_s_losses):.4f}\tumap temporal:{sum(umap_t_losses) / len(umap_t_losses):.4f}\trecon_l:{sum(recon_losses) / len(recon_losses):.4f}\tloss:{sum(all_loss) / len(all_loss):.4f}')
+        return self.loss
+    
+    def record_time(self, save_dir, file_name, operation, iteration, t):
+        # save result
+        save_file = os.path.join(save_dir, file_name+".json")
+        if not os.path.exists(save_file):
+            evaluation = dict()
+        else:
+            f = open(save_file, "r")
+            evaluation = json.load(f)
+            f.close()
+        if operation not in evaluation.keys():
+            evaluation[operation] = dict()
+        evaluation[operation][iteration] = round(t, 3)
+        with open(save_file, 'w') as f:
+            json.dump(evaluation, f)

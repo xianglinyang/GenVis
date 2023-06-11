@@ -118,7 +118,7 @@ def compute_cross_entropy_tf(
     return attraction_term, repellent_term, CE
 
 
-def find_neighbor_preserving_rate(prev_data, train_data, n_neighbors):
+def find_neighbor_preserving_rate(prev_data, train_data, n_neighbors, metric):
     """
     neighbor preserving rate, (0, 1)
     :param prev_data: ndarray, shape(N,2) low dimensional embedding from last epoch
@@ -133,7 +133,7 @@ def find_neighbor_preserving_rate(prev_data, train_data, n_neighbors):
     # max number of nearest neighbor iters to perform
     n_iters = max(5, int(round(np.log2(train_data.shape[0]))))
     # distance metric
-    metric = "euclidean"
+    # metric = "euclidean"
 
     # get nearest neighbors
     nnd = NNDescent(
@@ -149,7 +149,7 @@ def find_neighbor_preserving_rate(prev_data, train_data, n_neighbors):
     prev_nnd = NNDescent(
         prev_data,
         n_neighbors=n_neighbors,
-        metric="euclidean",
+        metric=metric,
         n_trees=n_trees,
         n_iters=n_iters,
         max_candidates=60,

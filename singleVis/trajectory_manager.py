@@ -5,8 +5,8 @@ from pynndescent import NNDescent
 from sklearn.neighbors import NearestNeighbors
 # TODO random ignore
 
-def find_cluster(trajectories, sub_labels, new_sample):
-    nbrs = NearestNeighbors(n_neighbors=2, algorithm='ball_tree').fit(trajectories)
+def find_cluster(trajectories, sub_labels, new_sample, metric="euclidean"):
+    nbrs = NearestNeighbors(n_neighbors=2, algorithm='ball_tree', metric=metric).fit(trajectories)
     distances, indices = nbrs.kneighbors(new_sample[np.newaxis,:])
     nearest_neighbor_idx = indices[0, 1]
     nearest_neighbor_dist = distances[0, 1]
@@ -23,7 +23,7 @@ def find_cluster(trajectories, sub_labels, new_sample):
     nnd = NNDescent(
         samples_in_cls,
         n_neighbors=2,
-        metric="euclidean",
+        metric=metric,
         n_trees=n_trees,
         n_iters=n_iters,
         max_candidates=60,

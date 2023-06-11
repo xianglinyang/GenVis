@@ -4,13 +4,13 @@ import os
 from pynndescent import NNDescent
 
 # helper function
-def hausdorff_d(curr_data, prev_data):
+def hausdorff_d(curr_data, prev_data, metric):
     # number of trees in random projection forest
     n_trees = min(64, 5 + int(round((curr_data.shape[0]) ** 0.5 / 20.0)))
     # max number of nearest neighbor iters to perform
     n_iters = max(5, int(round(np.log2(curr_data.shape[0]))))
     # distance metric
-    metric = "euclidean"
+    # metric = "euclidean"
     # get nearest neighbors
     nnd = NNDescent(
         curr_data,
@@ -26,9 +26,10 @@ def hausdorff_d(curr_data, prev_data):
     return m1
 
 class Segmenter:
-    def __init__(self, data_provider, threshold, range_s=None, range_e=None, range_p=None):
+    def __init__(self, data_provider, threshold, metric, range_s=None, range_e=None, range_p=None):
         self.data_provider = data_provider
         self.threshold = threshold
+        self.metric = metric
         if range_s is None:
             self.s = data_provider.s
             self.e = data_provider.e
@@ -49,7 +50,7 @@ class Segmenter:
             next_data = next_data.reshape(l, - 1)
             curr_data = curr_data.reshape(l, -1)
             # reshape representation
-            dists[(curr_epoch-self.s)//self.p] = hausdorff_d(curr_data=next_data, prev_data=curr_data)
+            dists[(curr_epoch-self.s)//self.p] = hausdorff_d(curr_data=next_data, prev_data=curr_data, metric=self.metric)
         
         # self.dists = np.copy(dists)
         return dists
@@ -94,7 +95,7 @@ class DenseALSegmenter(Segmenter):
         for curr_epoch in range(self.s, self.e, self.p):
             next_data = self.data_provider.train_representation_lb(iteration, curr_epoch+ self.p)
             curr_data = self.data_provider.train_representation_lb(iteration, curr_epoch)
-            dists[(curr_epoch-self.s)//self.p] = hausdorff_d(curr_data=next_data, prev_data=curr_data)
+            dists[(curr_epoch-self.s)//self.p] = hausdorff_d(curr_data=next_data, prev_data=curr_data, metric=self.metric)
         
         # self.dists = np.copy(dists)
         return dists

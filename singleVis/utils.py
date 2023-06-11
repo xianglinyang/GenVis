@@ -182,13 +182,11 @@ def jaccard_similarity(l1, l2):
     i = np.intersect1d(l1,l2)
     return float(len(i)) / len(u)
 
-def knn(data, k):
+def knn(data, k, metric):
     # number of trees in random projection forest
     n_trees = min(64, 5 + int(round((data.shape[0]) ** 0.5 / 20.0)))
     # max number of nearest neighbor iters to perform
     n_iters = max(5, int(round(np.log2(data.shape[0]))))
-    # distance metric
-    metric = "euclidean"
     # get nearest neighbors
     nnd = NNDescent(
         data,
@@ -248,7 +246,7 @@ def is_B(preds):
     return is_border
     
 
-def find_nearest(query):
+def find_nearest(query, metric):
     """
     find the distance to the nearest neighbor in the pool
     :param query: ndarray, shape (N,dim) 
@@ -259,9 +257,6 @@ def find_nearest(query):
     n_trees = min(64, 5 + int(round((query.shape[0]) ** 0.5 / 20.0)))
     # max number of nearest neighbor iters to perform
     n_iters = max(5, int(round(np.log2(query.shape[0]))))
-    # distance metric
-    metric = "euclidean"
-
     # get nearest neighbors
     nnd = NNDescent(
         query,
@@ -276,7 +271,7 @@ def find_nearest(query):
     return indices[:, 1], distances[:, 1]
 
 
-def find_neighbor_preserving_rate(prev_data, train_data, n_neighbors):
+def find_neighbor_preserving_rate(prev_data, train_data, n_neighbors, metric):
     """
     neighbor preserving rate, (0, 1)
     :param prev_data: ndarray, shape(N,2) low dimensional embedding from last epoch
@@ -291,12 +286,11 @@ def find_neighbor_preserving_rate(prev_data, train_data, n_neighbors):
     # max number of nearest neighbor iters to perform
     n_iters = max(5, int(round(np.log2(train_data.shape[0]))))
     # distance metric
-    from pynndescent import NNDescent
     # get nearest neighbors
     nnd = NNDescent(
         train_data,
         n_neighbors=n_neighbors,
-        metric="euclidean",
+        metric=metric,
         n_trees=n_trees,
         n_iters=n_iters,
         max_candidates=60,
@@ -306,7 +300,7 @@ def find_neighbor_preserving_rate(prev_data, train_data, n_neighbors):
     prev_nnd = NNDescent(
         prev_data,
         n_neighbors=n_neighbors,
-        metric="euclidean",
+        metric=metric,
         n_trees=n_trees,
         n_iters=n_iters,
         max_candidates=60,

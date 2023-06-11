@@ -34,7 +34,7 @@ class SpatialEdgeConstructorAbstractClass(ABC):
 class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
     '''Construct spatial complex
     '''
-    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors) -> None:
+    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric) -> None:
         """Init parameters for spatial edge constructor
 
         Parameters
@@ -56,6 +56,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         self.s_n_epochs = s_n_epochs
         self.b_n_epochs = b_n_epochs
         self.n_neighbors = n_neighbors
+        self.metric = metric
     
     def _construct_fuzzy_complex(self, train_data):
         """
@@ -65,13 +66,11 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         n_trees = min(64, 5 + int(round((train_data.shape[0]) ** 0.5 / 20.0)))
         # max number of nearest neighbor iters to perform
         n_iters = max(5, int(round(np.log2(train_data.shape[0]))))
-        # distance metric
-        metric = "euclidean"
         # get nearest neighbors
         nnd = NNDescent(
             train_data,
             n_neighbors=self.n_neighbors,
-            metric=metric,
+            metric=self.metric,
             n_trees=n_trees,
             n_iters=n_iters,
             max_candidates=60,
@@ -82,7 +81,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         complex, sigmas, rhos = fuzzy_simplicial_set(
             X=train_data,
             n_neighbors=self.n_neighbors,
-            metric=metric,
+            metric=self.metric,
             random_state=random_state,
             knn_indices=knn_indices,
             knn_dists=knn_dists,
@@ -104,7 +103,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         bw_complex, sigmas, rhos = fuzzy_simplicial_set(
             X=fitting_data,
             n_neighbors=self.n_neighbors,
-            metric="euclidean",
+            metric=self.metric,
             random_state=random_state,
             knn_indices=knn_indices,
             knn_dists=knn_dists,
@@ -121,7 +120,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         f_prev_el2n = self.data_provider.get_pred(next_iter, prev_data) - y
         f_next_el2n = self.data_provider.get_pred(next_iter, next_data) - y
 
-        high_neigh = NearestNeighbors(n_neighbors=self.n_neighbors, radius=0.4)
+        high_neigh = NearestNeighbors(n_neighbors=self.n_neighbors, radius=0.4, metric=self.metric)
         high_neigh.fit(f_prev_el2n)
         fitting_data = np.concatenate((f_next_el2n, f_prev_el2n), axis=0)
         knn_dists, knn_indices = high_neigh.kneighbors(f_next_el2n, n_neighbors=self.n_neighbors, return_distance=True)
@@ -135,7 +134,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         complex, sigmas, rhos = fuzzy_simplicial_set(
             X=fitting_data,
             n_neighbors=self.n_neighbors,
-            metric="euclidean",
+            metric=self.metric,
             random_state=random_state,
             knn_indices=knn_indices,
             knn_dists=knn_dists,
@@ -194,8 +193,8 @@ Strategies:
 '''
 
 class RandomSpatialEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors) -> None:
-        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors)
+    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric) -> None:
+        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric)
     
     def construct(self):
         # dummy input
@@ -279,8 +278,8 @@ class RandomSpatialEdgeConstructor(SpatialEdgeConstructor):
     
 
 class kcSpatialEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, MAX_HAUSDORFF, ALPHA, BETA, init_idxs=None, adding_num=100) -> None:
-        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors)
+    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric, MAX_HAUSDORFF, ALPHA, BETA, init_idxs=None, adding_num=100) -> None:
+        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric)
         self.MAX_HAUSDORFF = MAX_HAUSDORFF
         self.ALPHA = ALPHA
         self.BETA = BETA
@@ -434,8 +433,8 @@ class kcSpatialEdgeConstructor(SpatialEdgeConstructor):
 
 
 class kcParallelSpatialEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, MAX_HAUSDORFF, ALPHA, BETA) -> None:
-        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors)
+    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric, MAX_HAUSDORFF, ALPHA, BETA) -> None:
+        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric)
         self.MAX_HAUSDORFF = MAX_HAUSDORFF
         self.ALPHA = ALPHA
         self.BETA = BETA
@@ -576,9 +575,10 @@ class kcParallelSpatialEdgeConstructor(SpatialEdgeConstructor):
     
 
 class SingleEpochSpatialEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, iteration, s_n_epochs, b_n_epochs, n_neighbors) -> None:
-        super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors)
+    def __init__(self, data_provider, iteration, s_n_epochs, b_n_epochs, n_neighbors, metric) -> None:
+        super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors, metric)
         self.iteration = iteration
+        self.metric = metric
     
     def construct(self,):
         # load train data and border centers
@@ -622,8 +622,8 @@ class SingleEpochSpatialEdgeConstructor(SpatialEdgeConstructor):
 
 
 class kcHybridSpatialEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, MAX_HAUSDORFF, ALPHA, BETA, init_idxs=None, init_embeddings=None, c0=None, d0=None) -> None:
-        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors)
+    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric, MAX_HAUSDORFF, ALPHA, BETA, init_idxs=None, init_embeddings=None, c0=None, d0=None) -> None:
+        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric)
         self.MAX_HAUSDORFF = MAX_HAUSDORFF
         self.ALPHA = ALPHA
         self.BETA = BETA
@@ -795,8 +795,8 @@ class kcHybridSpatialEdgeConstructor(SpatialEdgeConstructor):
 
 
 class kcHybridDenseALSpatialEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, MAX_HAUSDORFF, ALPHA, BETA, iteration, init_idxs=None, init_embeddings=None, c0=None, d0=None) -> None:
-        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors)
+    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric, MAX_HAUSDORFF, ALPHA, BETA, iteration, init_idxs=None, init_embeddings=None, c0=None, d0=None) -> None:
+        super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric)
         self.MAX_HAUSDORFF = MAX_HAUSDORFF
         self.ALPHA = ALPHA
         self.BETA = BETA
@@ -967,8 +967,8 @@ class kcHybridDenseALSpatialEdgeConstructor(SpatialEdgeConstructor):
 
 
 class tfEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, s_n_epochs, b_n_epochs, n_neighbors) -> None:
-        super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors)
+    def __init__(self, data_provider, s_n_epochs, b_n_epochs, n_neighbors, metric) -> None:
+        super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors, metric)
     # override
     def _construct_step_edge_dataset(self, vr_complex, bw_complex):
         """

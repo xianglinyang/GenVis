@@ -25,9 +25,6 @@ of model.transform(X).
 Can be extended to a robust k centers algorithm that ignores a certain number of
 outlier datapoints.  Resulting centers are solution to multiple integer program.
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import time
 import numpy as np
@@ -164,7 +161,7 @@ def fps(data, num):
   from dgl.geometry import farthest_point_sampler
   data = torch.from_numpy(data[np.newaxis,:,:]).to(device=torch.device("cuda"))
   point_idxs = farthest_point_sampler(data, num).squeeze(axis=0)
-  point_idxs = point_idx.cpu().numpy()
+  point_idxs = point_idxs.cpu().numpy()
   return point_idxs
 
 if __name__ == "__main__":

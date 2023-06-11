@@ -194,10 +194,11 @@ class DVILoss(nn.Module):
 
 
 class LocalTemporalLoss(nn.Module):
-    def __init__(self, umap_loss, recon_loss, lambd):
+    def __init__(self, umap_loss, recon_loss, smooth_loss, lambd):
         super(LocalTemporalLoss, self).__init__()
         self.umap_loss = umap_loss
         self.recon_loss = recon_loss
+        self.smooth_loss = smooth_loss
         self.lambd = lambd
 
     def forward(self, edge_to, edge_from, a_to, a_from, coef, embedded_from, outputs):
@@ -209,17 +210,20 @@ class LocalTemporalLoss(nn.Module):
         # recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from)
 
         # split embedding into two pools, grad_required and stop gradient
-        embedding_to_grad = embedding_to[~coef]
-        embedding_from_grad = embedding_from[~coef]
-        embedding_to_no_grad = embedding_to[coef]
-        embedding_from_no_grad = embedding_from[coef].detach()
+        # embedding_to_grad = embedding_to[~coef]
+        # embedding_from_grad = embedding_from[~coef]
+        # embedding_to_no_grad = embedding_to[coef]
+        # embedding_from_no_grad = embedding_from[coef].detach()
+        # umap_l_s = self.umap_loss(embedding_to_grad, embedding_from_grad) 
+        # umap_l_t = self.umap_loss(embedding_to_no_grad, embedding_from_no_grad)
+        umap_l = self.umap_loss(embedding_to, embedding_from) 
+        smooth_l = self.smooth_loss(embedding_from, embedded_from, coef)
 
-        umap_l_s = self.umap_loss(embedding_to_grad, embedding_from_grad) 
-        umap_l_t = self.umap_loss(embedding_to_no_grad, embedding_from_no_grad)
+        # loss = umap_l_s + 0.1*umap_l_t  + self.lambd * recon_l
+        loss = umap_l + self.lambd * recon_l+ smooth_l
 
-        loss = umap_l_s + umap_l_t  + self.lambd * recon_l
-
-        return umap_l_s, umap_l_t, recon_l, loss
+        # return umap_l_s, umap_l_t, recon_l, loss
+        return umap_l, recon_l, smooth_l, loss
 
 
 import tensorflow as tf

@@ -318,8 +318,8 @@ class LocalTemporalTrainer(SingleVisTrainer):
         self.model = self.model.to(device=self.DEVICE)
         self.model.train()
         all_loss = []
-        umap_s_losses = []
-        umap_t_losses = []
+        smooth_losses = []
+        umap_losses = []
         recon_losses = []
 
         t = tqdm(self.edge_loader, leave=True, total=len(self.edge_loader))
@@ -337,18 +337,18 @@ class LocalTemporalTrainer(SingleVisTrainer):
             # embedded_from[coeffi_from.to(torch.bool)].requires_grad = False
 
             outputs = self.model(edge_to, edge_from)
-            umap_l_s, umap_l_t, recon_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, coeffi_from, embedded_from, outputs)
+            umap_l, recon_l, smooth_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, coeffi_from, embedded_from, outputs)
             all_loss.append(loss.item())
-            umap_s_losses.append(umap_l_s.item())
-            umap_t_losses.append(umap_l_t.item())
+            umap_losses.append(umap_l.item())
             recon_losses.append(recon_l.item())
+            smooth_losses.append(smooth_l.item())
             # ===================backward====================
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
         self._loss = sum(all_loss) / len(all_loss)
         self.model.eval()
-        print(f'umap spatial:{sum(umap_s_losses) / len(umap_s_losses):.4f}\tumap temporal:{sum(umap_t_losses) / len(umap_t_losses):.4f}\trecon_l:{sum(recon_losses) / len(recon_losses):.4f}\tloss:{sum(all_loss) / len(all_loss):.4f}')
+        print(f'umap spatial:{sum(umap_losses) / len(umap_losses):.4f}\tsmooth:{sum(smooth_losses) / len(smooth_losses):.4f}\trecon_l:{sum(recon_losses) / len(recon_losses):.4f}\tloss:{sum(all_loss) / len(all_loss):.4f}')
         return self.loss
     
     def record_time(self, save_dir, file_name, operation, iteration, t):

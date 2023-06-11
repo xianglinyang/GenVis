@@ -15,7 +15,7 @@ from umap.umap_ import find_ab_params
 
 from singleVis.custom_weighted_random_sampler import CustomWeightedRandomSampler
 from singleVis.SingleVisualizationModel import VisModel
-from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss, LocalTemporalLoss
+from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss, LocalTemporalLoss, SmoothnessLoss
 from singleVis.edge_dataset import DVIDataHandler, LocalTemporalDataHandler
 from singleVis.trainer import DVITrainer, SingleVisTrainer, LocalTemporalTrainer
 from singleVis.data import NormalDataProvider
@@ -98,6 +98,7 @@ min_dist = .1
 _a, _b = find_ab_params(1.0, min_dist)
 umap_loss_fn = UmapLoss(negative_sample_rate, DEVICE, _a, _b, repulsion_strength=1.0)
 recon_loss_fn = ReconstructionLoss(beta=1.0)
+smooth_loss_fn = SmoothnessLoss(margin=0.0)
 single_loss_fn = SingleVisLoss(umap_loss_fn, recon_loss_fn, lambd=LAMBDA1)
 # Define Projector
 projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, epoch_name=EPOCH_NAME, device=DEVICE)
@@ -117,7 +118,7 @@ lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
 # Define Edge dataset
 t0 = time.time()
 
-spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, EPOCH_START, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS)
+spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, EPOCH_START, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="cosine")
 edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
 
 dataset = DVIDataHandler(edge_to, edge_from, feature_vectors, attention)
@@ -138,7 +139,7 @@ t3 = time.time()
 
 save_dir = os.path.join(data_provider.model_path, "Epoch_{}".format(EPOCH_START))
 trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
-print("Finish epoch {}...".format(EPOCH_START))
+save_dir = os.path.join(data_provider.content_path, "img")
 vis.savefig(EPOCH_START, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, EPOCH_START, VIS_METHOD)))
 evaluator.save_epoch_eval(EPOCH_START, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
 # get prev_embedding
@@ -146,13 +147,13 @@ prev_embedding = projector.batch_project(EPOCH_START, data_provider.train_repres
 
 for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
     # Define Criterion
-    criterion = LocalTemporalLoss(umap_loss_fn, recon_loss_fn, lambd=LAMBDA1)
+    criterion = LocalTemporalLoss(umap_loss_fn, recon_loss_fn, smooth_loss_fn, lambd=LAMBDA1)
     # Define training parameters
     optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
     # Define Edge dataset
     t0 = time.time()
-    spatial_cons = LocalSpatialTemporalEdgeConstructor(data_provider, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS)
+    spatial_cons = LocalSpatialTemporalEdgeConstructor(data_provider, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="cosine")
     edge_to, edge_from, probs, feature_vectors, attention, coefficient, embedded = spatial_cons.construct(iteration-EPOCH_PERIOD, iteration, prev_embedding)
     t1 = time.time()
     
@@ -179,8 +180,7 @@ for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_P
     save_dir = os.path.join(data_provider.model_path, "Epoch_{}".format(iteration))
     trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
 
-    print("Finish epoch {}...".format(iteration))
-
+    save_dir = os.path.join(data_provider.content_path, "img")
     vis.savefig(iteration, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, iteration, VIS_METHOD)))
     evaluator.save_epoch_eval(iteration, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
 

@@ -16,6 +16,12 @@ from singleVis.intrinsic_dim import IntrinsicDim
 from singleVis.backend import get_graph_elements, get_attention
 from singleVis.utils import find_neighbor_preserving_rate
 
+def normalize_data(train_data):
+    train_max = train_data.max(axis=0)
+    train_min = train_data.min(axis=0)
+    train_data = (train_data - train_max)/(train_max-train_min)
+    return train_data
+
 class SpatialEdgeConstructorAbstractClass(ABC):
     @abstractmethod
     def __init__(self, data_provider) -> None:
@@ -114,21 +120,31 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         """
         construct a temporal complex
         """
-        train_labels = self.data_provider.train_labels(next_iter)
-        y = np.eye(np.max(train_labels)+1)[train_labels]
-        # forward and backward
-        f_prev_el2n = self.data_provider.get_pred(next_iter, prev_data) - y
-        f_next_el2n = self.data_provider.get_pred(next_iter, next_data) - y
+        # el2n
+        # train_labels = self.data_provider.train_labels(next_iter)
+        # y = np.eye(np.max(train_labels)+1)[train_labels]
+        # # forward and backward
+        # f_prev_el2n = self.data_provider.get_pred(next_iter, prev_data) - y
+        # f_next_el2n = self.data_provider.get_pred(next_iter, next_data) - y
 
+        # high_neigh = NearestNeighbors(n_neighbors=self.n_neighbors, radius=0.4, metric=self.metric)
+        # high_neigh.fit(f_prev_el2n)
+        # fitting_data = np.concatenate((f_next_el2n, f_prev_el2n), axis=0)
+        # knn_dists, knn_indices = high_neigh.kneighbors(f_next_el2n, n_neighbors=self.n_neighbors, return_distance=True)
+        # knn_indices = knn_indices + len(f_next_el2n) + b_num
+        # # ignore the structure of prev_data
+        # knn_dists = np.concatenate((knn_dists, np.zeros_like(knn_dists)), axis=0)
+        # knn_indices = np.concatenate((knn_indices, -np.ones_like(knn_indices)), axis=0)
+
+        # cosine distance
         high_neigh = NearestNeighbors(n_neighbors=self.n_neighbors, radius=0.4, metric=self.metric)
-        high_neigh.fit(f_prev_el2n)
-        fitting_data = np.concatenate((f_next_el2n, f_prev_el2n), axis=0)
-        knn_dists, knn_indices = high_neigh.kneighbors(f_next_el2n, n_neighbors=self.n_neighbors, return_distance=True)
-        knn_indices = knn_indices + len(f_next_el2n) + b_num
+        high_neigh.fit(prev_data)
+        fitting_data = np.concatenate((next_data, prev_data), axis=0)
+        knn_dists, knn_indices = high_neigh.kneighbors(next_data, n_neighbors=self.n_neighbors, return_distance=True)
+        knn_indices = knn_indices + len(next_data) + b_num
         # ignore the structure of prev_data
         knn_dists = np.concatenate((knn_dists, np.zeros_like(knn_dists)), axis=0)
         knn_indices = np.concatenate((knn_indices, -np.ones_like(knn_indices)), axis=0)
-
 
         random_state = check_random_state(None)
         complex, sigmas, rhos = fuzzy_simplicial_set(
@@ -586,6 +602,9 @@ class SingleEpochSpatialEdgeConstructor(SpatialEdgeConstructor):
         # selected = np.random.choice(len(train_data), int(0.5*len(train_data)), replace=False)
         # train_data = train_data[selected]
 
+        # normalization
+        # train_data = normalize_data(train_data)
+
         if self.b_n_epochs > 0:
             border_centers = self.data_provider.border_representation(self.iteration).squeeze()
             complex, _, _, _ = self._construct_fuzzy_complex(train_data)
@@ -1033,14 +1052,17 @@ class tfEdgeConstructor(SpatialEdgeConstructor):
         return edges_to_exp, edges_from_exp, weights_exp, feature_vectors, attention, n_rate
 
 class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, s_n_epochs, b_n_epochs, t_n_epochs, n_neighbors) -> None:
-        super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors)
+    def __init__(self, data_provider, s_n_epochs, b_n_epochs, t_n_epochs, n_neighbors, metric) -> None:
+        super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors, metric)
         self.t_n_epochs = t_n_epochs
 
     def construct(self, prev_iter, next_iter, prev_embedding):
         # load train data and border centers
         prev_data = self.data_provider.train_representation(prev_iter)
+        # prev_data = normalize_data(prev_data)
         next_data = self.data_provider.train_representation(next_iter)
+        # next_data = normalize_data(next_data)
+
         # selected = np.random.choice(len(train_data), int(0.5*len(train_data)), replace=False)
         # train_data = train_data[selected]
 

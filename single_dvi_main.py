@@ -23,11 +23,12 @@ from singleVis.spatial_edge_constructor import SingleEpochSpatialEdgeConstructor
 from singleVis.projector import DVIProjector
 from singleVis.eval.evaluator import Evaluator
 from singleVis.utils import knn
+from singleVis.kcenter_greedy import kCenterGreedy
 ########################################################################################################################
 #                                                     DVI PARAMETERS                                                   #
 ########################################################################################################################
 """This serve as an example of DeepVisualInsight implementation in pytorch."""
-VIS_METHOD = "DVI" # DeepVisualInsight
+VIS_METHOD = "singleDVI" # DeepVisualInsight
 
 ########################################################################################################################
 #                                                     LOAD PARAMETERS                                                  #
@@ -106,7 +107,7 @@ _a, _b = find_ab_params(1.0, min_dist)
 umap_loss_fn = UmapLoss(negative_sample_rate, DEVICE, _a, _b, repulsion_strength=1.0)
 recon_loss_fn = ReconstructionLoss(beta=1.0)
 # Define Projector
-projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, device=DEVICE)
+projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, epoch_name=EPOCH_NAME, device=DEVICE)
 
 
 # Define DVI Loss
@@ -117,15 +118,31 @@ optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
 # Define Edge dataset
 t0 = time.time()
-spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, I, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS)
+spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, I, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="cosine")
+
+# random sampling
+# train_data = data_provider.train_representation(I)
+# ratio = 1
+# ratio=0.15
+# selected = np.random.choice(len(train_data), int(ratio*len(train_data)), replace=False)
+# # import json
+# # with open("/home/xianglin/projects/git_space/DLVisDebugger/experiments/idxs.json", "r") as f:
+# #     selected = json.load(f)
+# train_data = train_data[selected]
+# # kc = kCenterGreedy(train_data)
+# # selected_idxs = np.random.choice(len(train_data), 200, replace=False)
+# # kc.select_batch_with_budgets(selected_idxs, budgets=int(ratio*len(train_data))-200)
+# # selected_idxs = kc.already_selected.astype("int")
+# # train_data = train_data[selected_idxs]
+
 edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
 t1 = time.time()
 
-probs = probs / (probs.max()+1e-3)
-eliminate_zeros = probs>1e-2#1e-3
-edge_to = edge_to[eliminate_zeros]
-edge_from = edge_from[eliminate_zeros]
-probs = probs[eliminate_zeros]
+# probs = probs / (probs.max()+1e-3)
+# eliminate_zeros = probs>1e-2#1e-3
+# edge_to = edge_to[eliminate_zeros]
+# edge_from = edge_from[eliminate_zeros]
+# probs = probs[eliminate_zeros]
 
 dataset = DataHandler(edge_to, edge_from, feature_vectors, attention)
 
@@ -135,11 +152,11 @@ if len(edge_to) > pow(2,24):
     sampler = CustomWeightedRandomSampler(probs, n_samples, replacement=True)
 else:
     sampler = WeightedRandomSampler(probs, n_samples, replacement=True)
-edge_loader = DataLoader(dataset, batch_size=1000, sampler=sampler)
+edge_loader = DataLoader(dataset, batch_size=2000, sampler=sampler)
 
-########################################################################################################################
-#                                                       TRAIN                                                          #
-########################################################################################################################
+#######################################################################################################################
+#                                                       TRAIN                                                         #
+#######################################################################################################################
 
 trainer = SingleVisTrainer(model, criterion, optimizer, lr_scheduler,edge_loader=edge_loader, DEVICE=DEVICE)
 
@@ -173,13 +190,14 @@ trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
 #                                                      VISUALIZATION                                                   #
 ########################################################################################################################
 
-# from singleVis.visualizer import visualizer
+from singleVis.visualizer import visualizer
 
-# vis = visualizer(data_provider, projector, 200, "tab10")
-# save_dir = os.path.join(data_provider.content_path, "img")
-# if not os.path.exists(save_dir):
-#     os.mkdir(save_dir)
-# vis.savefig(I, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, I, VIS_METHOD)))
+ratio = 1
+vis = visualizer(data_provider, projector, 200, "tab10")
+save_dir = os.path.join(data_provider.content_path, "img")
+if not os.path.exists(save_dir):
+    os.mkdir(save_dir)
+vis.savefig(I, path=os.path.join(save_dir, "{}_{}_{}_{}.png".format(DATASET, I, ratio, VIS_METHOD)))
 
 
 ########################################################################################################################

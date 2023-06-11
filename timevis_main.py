@@ -111,7 +111,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
 
 t0 = time.time()
-spatial_cons = kcSpatialEdgeConstructor(data_provider=data_provider, init_num=INIT_NUM, s_n_epochs=S_N_EPOCHS, b_n_epochs=B_N_EPOCHS, n_neighbors=N_NEIGHBORS, MAX_HAUSDORFF=None, ALPHA=ALPHA, BETA=BETA)
+spatial_cons = kcSpatialEdgeConstructor(data_provider=data_provider, init_num=INIT_NUM, s_n_epochs=S_N_EPOCHS, b_n_epochs=B_N_EPOCHS, n_neighbors=N_NEIGHBORS,metric="cosine", MAX_HAUSDORFF=None, ALPHA=ALPHA, BETA=BETA)
 s_edge_to, s_edge_from, s_probs, feature_vectors, time_step_nums, time_step_idxs_list, knn_indices, sigmas, rhos, attention = spatial_cons.construct()
 temporal_cons = GlobalTemporalEdgeConstructor(X=feature_vectors, time_step_nums=time_step_nums, sigmas=sigmas, rhos=rhos, n_neighbors=N_NEIGHBORS, n_epochs=T_N_EPOCHS)
 t_edge_to, t_edge_from, t_probs = temporal_cons.construct()
@@ -120,11 +120,11 @@ t1 = time.time()
 edge_to = np.concatenate((s_edge_to, t_edge_to),axis=0)
 edge_from = np.concatenate((s_edge_from, t_edge_from), axis=0)
 probs = np.concatenate((s_probs, t_probs), axis=0)
-probs = probs / (probs.max()+1e-3)
-eliminate_zeros = probs>1e-3
-edge_to = edge_to[eliminate_zeros]
-edge_from = edge_from[eliminate_zeros]
-probs = probs[eliminate_zeros]
+# probs = probs / (probs.max()+1e-3)
+# eliminate_zeros = probs>1e-3
+# edge_to = edge_to[eliminate_zeros]
+# edge_from = edge_from[eliminate_zeros]
+# probs = probs[eliminate_zeros]
 
 dataset = DataHandler(edge_to, edge_from, feature_vectors, attention)
 n_samples = int(np.sum(S_N_EPOCHS * probs) // 1)
@@ -158,13 +158,13 @@ vis = visualizer(data_provider, projector, 200)
 save_dir = os.path.join(data_provider.content_path, "img")
 os.makedirs(save_dir, exist_ok=True)
 
-for i in range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD*4):
+for i in range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD):
     vis.save_default_fig(i, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, i, VIS_METHOD)))
 
 ########################################################################################################################
 #                                                       EVALUATION                                                     #
 ########################################################################################################################
-# eval_epochs = range(EPOCH_START, EPOCH_END, EPOCH_PERIOD)
-# evaluator = Evaluator(data_provider, projector)
-# for eval_epoch in eval_epochs:
-#     evaluator.save_epoch_eval(eval_epoch, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
+eval_epochs = range(EPOCH_START, EPOCH_END, EPOCH_PERIOD)
+evaluator = Evaluator(data_provider, projector)
+for eval_epoch in eval_epochs:
+    evaluator.save_epoch_eval(eval_epoch, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))

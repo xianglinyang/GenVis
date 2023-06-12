@@ -116,7 +116,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         )
         return bw_complex, sigmas, rhos, knn_indices
     
-    def _construct_local_temporal_complex(self, prev_data, next_data, next_iter, b_num=0):
+    def _construct_local_temporal_complex(self, prev_data, next_data, b_num=0):
         """
         construct a temporal complex
         """
@@ -1059,6 +1059,10 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
     def construct(self, prev_iter, next_iter, prev_embedding):
         # load train data and border centers
         prev_data = self.data_provider.train_representation(prev_iter)
+        selected = np.random.choice(len(prev_data), int(0.1*len(prev_data)), replace=False)
+        prev_data = prev_data[selected]
+        prev_embedded = prev_embedding[selected]
+
         # prev_data = normalize_data(prev_data)
         next_data = self.data_provider.train_representation(next_iter)
         # next_data = normalize_data(next_data)
@@ -1071,7 +1075,7 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             border_centers = self.data_provider.border_representation(self.next_iter).squeeze()
             complex, _, _, _ = self._construct_fuzzy_complex(next_data)
             bw_complex, _, _, _ = self._construct_boundary_wise_complex(next_data, border_centers)
-            t_complex, _, _ = self._construct_local_temporal_complex(prev_data, next_data, next_iter, b_num=len(border_centers))
+            t_complex, _, _ = self._construct_local_temporal_complex(prev_data, next_data, b_num=len(border_centers))
             edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, bw_complex, t_complex)
             feature_vectors = np.concatenate((next_data, border_centers, prev_data), axis=0)
             # pred_model = self.data_provider.prediction_function(self.iteration)
@@ -1079,7 +1083,7 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             attention = np.zeros(feature_vectors.shape)
         elif self.b_n_epochs == 0:
             complex, _, _, _ = self._construct_fuzzy_complex(next_data)
-            t_complex, _, _, _ = self._construct_local_temporal_complex(prev_data, next_data, next_iter)
+            t_complex, _, _, _ = self._construct_local_temporal_complex(prev_data, next_data)
             edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, None, t_complex)
             feature_vectors = np.concatenate((next_data, prev_data), axis=0)
             # pred_model = self.data_provider.prediction_function(self.iteration)
@@ -1089,9 +1093,9 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             raise Exception("Illegal border edges proposion!")
         
         coefficient = np.zeros(len(feature_vectors))
-        coefficient[-len(prev_embedding):] = 1
+        coefficient[-len(prev_embedded):] = 1
         embedded = np.zeros((len(feature_vectors), 2))
-        embedded[-len(prev_embedding):] = prev_embedding
+        embedded[-len(prev_embedded):] = prev_embedded
             
         return edge_to, edge_from, weight, feature_vectors, attention, coefficient, embedded
     

@@ -5,8 +5,7 @@ Help functions to evaluate our visualization system
 import numpy as np
 from pynndescent import NNDescent
 from sklearn.neighbors import NearestNeighbors
-from sklearn.manifold import trustworthiness
-from scipy.stats import kendalltau, spearmanr, pearsonr, rankdata
+from scipy.stats import spearmanr, pearsonr, rankdata
 
 
 def evaluate_proj_nn_perseverance_knn(data, embedding, n_neighbors, metric="euclidean"):
@@ -63,7 +62,7 @@ def evaluate_proj_nn_perseverance_trustworthiness(data, embedding, n_neighbors, 
     return t
 
 
-def evaluate_proj_boundary_perseverance_knn(data, embedding, high_centers, low_centers, n_neighbors):
+def evaluate_proj_boundary_perseverance_knn(data, embedding, high_centers, low_centers, n_neighbors, metric):
     """
     evaluate projection function, boundary preserving property
     :param data: ndarray, high dimensional representations
@@ -73,11 +72,11 @@ def evaluate_proj_boundary_perseverance_knn(data, embedding, high_centers, low_c
     :param n_neighbors: int, the number of neighbors
     :return boundary preserving property: float,boundary preserving property
     """
-    high_neigh = NearestNeighbors(n_neighbors=n_neighbors, radius=0.4)
+    high_neigh = NearestNeighbors(n_neighbors=n_neighbors, radius=0.4, metric=metric)
     high_neigh.fit(high_centers)
     high_ind = high_neigh.kneighbors(data, n_neighbors=n_neighbors, return_distance=False)
 
-    low_neigh = NearestNeighbors(n_neighbors=n_neighbors, radius=0.4)
+    low_neigh = NearestNeighbors(n_neighbors=n_neighbors, radius=0.4, metric=metric)
     low_neigh.fit(low_centers)
     low_ind = low_neigh.kneighbors(embedding, n_neighbors=n_neighbors, return_distance=False)
 
@@ -119,6 +118,24 @@ def evaluate_inv_distance(data, inv_data):
     :return err: mse, reconstruction error
     """
     return np.linalg.norm(data-inv_data, axis=1).mean()
+    # if metric == "euclidean":
+    #     return np.linalg.norm(data-inv_data, axis=1)
+    # elif metric == "cosine":
+    #     return np.array([1 - np.dot(data[i], inv_data[i])/np.linalg.norm(data[i])*np.linalg.norm(inv_data[i]) for i in range(len(data))])
+    # else:
+    #     raise NotImplementedError
+
+def evaluate_embedding_distance(source, target, metric, one_target):
+    if metric == "euclidean":
+        return np.linalg.norm(source-target, axis=1)
+    elif metric == "cosine":
+        if one_target:
+            return np.array([1 - np.dot(source[i], target)/np.linalg.norm(source[i])*np.linalg.norm(target) for i in range(len(source))])
+        else:
+            return np.array([1 - np.dot(source[i], target[i])/np.linalg.norm(source[i])*np.linalg.norm(target[i]) for i in range(len(source))])
+    else:
+        raise NotImplementedError
+
 
 
 def evaluate_inv_accu(labels, pred):
@@ -161,7 +178,6 @@ def evaluate_proj_temporal_perseverance_entropy(alpha, delta_x):
     alpha = alpha.T
     delta_x = delta_x.T
     shape = alpha.shape
-    data_num = shape[0]
     # normalize
     # delta_x_norm = delta_x.max(-1)
     # delta_x_norm = (delta_x.T/delta_x_norm).T
@@ -224,7 +240,7 @@ def evaluate_proj_temporal_weighted_global_corr(high_rank, low_rank):
     return tau
 
 
-def evaluate_keep_B(low_B, grid_view, decision_view, threshold=0.8):
+def evaluate_keep_B(low_B, grid_view, decision_view, metric, threshold=0.8):
     """
     evaluate whether high dimensional boundary points still lying on Boundary in low-dimensional space or not
     find the nearest grid point of boundary points, and check whether the color of corresponding grid point is white or not
@@ -242,7 +258,7 @@ def evaluate_keep_B(low_B, grid_view, decision_view, threshold=0.8):
     decision_view = decision_view.reshape(-1, 3)
 
     # find the color of nearest grid view
-    nbs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree").fit(grid_view)
+    nbs = NearestNeighbors(n_neighbors=1, algorithm="ball_tree", metric=metric).fit(grid_view)
     _, indices = nbs.kneighbors(low_B)
     indices = indices.squeeze()
     sample_colors = decision_view[indices]

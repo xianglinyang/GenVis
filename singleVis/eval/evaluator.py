@@ -43,10 +43,11 @@ class EvaluatorAbstractClass(ABC):
 
 
 class Evaluator(EvaluatorAbstractClass):
-    def __init__(self, data_provider, projector, verbose=1):
+    def __init__(self, data_provider, projector, metric, verbose=1):
         self.data_provider = data_provider
         self.projector = projector
         self.verbose = verbose
+        self.metric = metric
 
     ####################################### ATOM #############################################
 
@@ -54,7 +55,7 @@ class Evaluator(EvaluatorAbstractClass):
         train_data = self.data_provider.train_representation(epoch)
         train_data = train_data.reshape(len(train_data), -1)
         embedding = self.projector.batch_project(epoch, train_data)
-        val = evaluate_proj_nn_perseverance_knn(train_data, embedding, n_neighbors=n_neighbors, metric="euclidean")
+        val = evaluate_proj_nn_perseverance_knn(train_data, embedding, n_neighbors=n_neighbors, metric=self.metric)
         if self.verbose:
             print("#train# nn preserving: {:.2f}/{:d} in epoch {:d}".format(val, n_neighbors, epoch))
         return val
@@ -66,7 +67,7 @@ class Evaluator(EvaluatorAbstractClass):
         test_data = test_data.reshape(len(test_data), -1)
         fitting_data = np.concatenate((train_data, test_data), axis=0)
         embedding = self.projector.batch_project(epoch, fitting_data)
-        val = evaluate_proj_nn_perseverance_knn(fitting_data, embedding, n_neighbors=n_neighbors, metric="euclidean")
+        val = evaluate_proj_nn_perseverance_knn(fitting_data, embedding, n_neighbors=n_neighbors, metric=self.metric)
         if self.verbose:
             print("#test# nn preserving : {:.2f}/{:d} in epoch {:d}".format(val, n_neighbors, epoch))
         return val
@@ -83,7 +84,8 @@ class Evaluator(EvaluatorAbstractClass):
                                                       low_train,
                                                       border_centers,
                                                       low_center,
-                                                      n_neighbors=n_neighbors)
+                                                      n_neighbors=n_neighbors,
+                                                      metric=self.metric)
         if self.verbose:
             print("#train# boundary preserving: {:.2f}/{:d} in epoch {:d}".format(val, n_neighbors, epoch))
         return val
@@ -101,7 +103,8 @@ class Evaluator(EvaluatorAbstractClass):
                                                       low_test,
                                                       border_centers,
                                                       low_center,
-                                                      n_neighbors=n_neighbors)
+                                                      n_neighbors=n_neighbors,
+                                                      metric=self.metric)
         if self.verbose:
             print("#test# boundary preserving: {:.2f}/{:d} in epoch {:d}".format(val, n_neighbors, epoch))
         return val
@@ -136,8 +139,8 @@ class Evaluator(EvaluatorAbstractClass):
         train_data = self.data_provider.train_representation(epoch)
         embedding = self.projector.batch_project(epoch, train_data)
         inv_data = self.projector.batch_inverse(epoch, embedding)
-        dist = np.linalg.norm(train_data-inv_data, axis=1).mean()
-        
+
+        dist = evaluate_inv_distance(train_data, inv_data)
         if self.verbose:
             print("#train# inverse projection distance: {:.2f} in epoch {:d}".format(dist, epoch))
         return float(dist)
@@ -146,7 +149,7 @@ class Evaluator(EvaluatorAbstractClass):
         test_data = self.data_provider.test_representation(epoch)
         embedding = self.projector.batch_project(epoch, test_data)
         inv_data = self.projector.batch_inverse(epoch, embedding)
-        dist = np.linalg.norm(test_data-inv_data, axis=1).mean()
+        dist = evaluate_inv_distance(test_data, inv_data)
         if self.verbose:
             print("#test# inverse projection distance: {:.2f} in epoch {:d}".format(dist, epoch))
         return float(dist)
@@ -165,8 +168,9 @@ class Evaluator(EvaluatorAbstractClass):
             curr_data = self.data_provider.train_representation((t+1) * self.data_provider.p + self.data_provider.s)
             curr_embedding = self.projector.batch_project((t+1) * self.data_provider.p + self.data_provider.s, curr_data)
 
-            alpha_ = find_neighbor_preserving_rate(prev_data, curr_data, n_neighbors=n_neighbors)
-            delta_x_ = np.linalg.norm(prev_embedding - curr_embedding, axis=1)
+            alpha_ = find_neighbor_preserving_rate(prev_data, curr_data, n_neighbors=n_neighbors, metric=self.metric)
+            delta_x_ = evaluate_embedding_distance(prev_embedding, curr_embedding, metric=self.metric, one_target=False)
+            # delta_x_ = np.linalg.norm(prev_embedding - curr_embedding, axis=1)
 
             alpha[t] = alpha_
             delta_x[t] = delta_x_
@@ -193,8 +197,9 @@ class Evaluator(EvaluatorAbstractClass):
             curr_data = np.concatenate((curr_data_train, curr_data_test), axis=0)
             curr_embedding = self.projector.batch_project((t+1) * self.data_provider.p + self.data_provider.s, curr_data)
 
-            alpha_ = find_neighbor_preserving_rate(prev_data, curr_data, n_neighbors=n_neighbors)
-            delta_x_ = np.linalg.norm(prev_embedding - curr_embedding, axis=1)
+            alpha_ = find_neighbor_preserving_rate(prev_data, curr_data, n_neighbors=n_neighbors, metric=self.metric)
+            delta_x_ = evaluate_embedding_distance(prev_embedding, curr_embedding, metric=self.metric, one_target=False)
+            # delta_x_ = np.linalg.norm(prev_embedding - curr_embedding, axis=1)
 
             alpha[t] = alpha_
             delta_x[t] = delta_x_
@@ -217,8 +222,8 @@ class Evaluator(EvaluatorAbstractClass):
             data = self.data_provider.train_representation(t * self.data_provider.p + self.data_provider.s)
             embedding = self.projector.batch_project(t * self.data_provider.p + self.data_provider.s, data)
 
-            high_dist = np.linalg.norm(curr_data - data, axis=1)
-            low_dist = np.linalg.norm(curr_embedding - embedding, axis=1)
+            high_dist = evaluate_embedding_distance(data, curr_data, metric=self.metric, one_target=False)
+            low_dist = evaluate_embedding_distance(embedding, curr_embedding, metric=self.metric, one_target=False)
             high_dists[:, t] = high_dist
             low_dists[:, t] = low_dist
         
@@ -250,9 +255,8 @@ class Evaluator(EvaluatorAbstractClass):
         for t in range(epoch_num):
             data = self.data_provider.test_representation(t * self.data_provider.p + self.data_provider.s)
             embedding = self.projector.batch_project(t * self.data_provider.p + self.data_provider.s, data)
-
-            high_dist = np.linalg.norm(curr_data - data, axis=1)
-            low_dist = np.linalg.norm(curr_embedding - embedding, axis=1)
+            high_dist = evaluate_embedding_distance(data, curr_data, metric=self.metric, one_target=False)
+            low_dist = evaluate_embedding_distance(embedding, curr_embedding, metric=self.metric, one_target=False)
             high_dists[:, t] = high_dist
             low_dists[:,t] = low_dist
         
@@ -286,7 +290,7 @@ class Evaluator(EvaluatorAbstractClass):
             high_features[t*train_num:(t+1)*train_num] = np.copy(data)
             low_features[t*train_num:(t+1)*train_num] = self.projector.batch_project(t * self.data_provider.p + self.data_provider.s, data)
         
-        val = evaluate_proj_nn_perseverance_knn(high_features, low_features, n_neighbors)
+        val = evaluate_proj_nn_perseverance_knn(high_features, low_features, n_neighbors, metric=self.metric)
 
         if self.verbose:
             print("Spatial/Temporal nn preserving (train):\t{:.3f}/{:d}".format(val, n_neighbors))
@@ -310,7 +314,7 @@ class Evaluator(EvaluatorAbstractClass):
             low_features[t*num:(t+1)*num] = self.projector.batch_project(t * self.data_provider.p + self.data_provider.s, data)
             high_features[t*num:(t+1)*num] = np.copy(data)
 
-        val =evaluate_proj_nn_perseverance_knn(high_features, low_features, n_neighbors)
+        val =evaluate_proj_nn_perseverance_knn(high_features, low_features, n_neighbors, metric=self.metric)
     
         if self.verbose:
             print("Spatial/Temporal nn preserving (test):\t{:.3f}/{:d}".format(val, n_neighbors))
@@ -342,8 +346,10 @@ class Evaluator(EvaluatorAbstractClass):
             high_embeddings = all_train_repr[:,i,:].squeeze()
             low_embeddings = low_repr[:,i,:].squeeze()
 
-            high_dists = np.linalg.norm(high_embeddings - high_embeddings[(epoch - start) //  period], axis=1)
-            low_dists = np.linalg.norm(low_embeddings - low_embeddings[(epoch - start) //  period], axis=1)
+            high_dists = evaluate_embedding_distance(high_embeddings , high_embeddings[(epoch - start) //  period], metric=self.metric, one_target=True)
+            low_dists = evaluate_embedding_distance(low_embeddings , low_embeddings[(epoch - start) //  period], metric=self.metric, one_target=True)
+            # high_dists = np.linalg.norm(high_embeddings - high_embeddings[(epoch - start) //  period], axis=1)
+            # low_dists = np.linalg.norm(low_embeddings - low_embeddings[(epoch - start) //  period], axis=1)
         
             corr, p = stats.spearmanr(high_dists, low_dists)
             corrs[i] = corr
@@ -373,8 +379,11 @@ class Evaluator(EvaluatorAbstractClass):
         for i in range(TEST_LEN):
             high_embeddings = all_test_repr[:,i,:].squeeze()
             low_embeddings = low_repr[:,i,:].squeeze()
-            high_dists = np.linalg.norm(high_embeddings - high_embeddings[e], axis=1)
-            low_dists = np.linalg.norm(low_embeddings - low_embeddings[e], axis=1)
+            high_dists = evaluate_embedding_distance(high_embeddings , high_embeddings[e], metric=self.metric, one_target=True)
+            low_dists = evaluate_embedding_distance(low_embeddings , low_embeddings[e], metric=self.metric, one_target=True)
+            # high_dists = np.linalg.norm(high_embeddings - high_embeddings[e], axis=1)
+            # low_dists = np.linalg.norm(low_embeddings - low_embeddings[e], axis=1)
+            
             corr, p = stats.spearmanr(high_dists, low_dists)
             corrs[i] = corr
             ps[i] = p
@@ -404,8 +413,10 @@ class Evaluator(EvaluatorAbstractClass):
             high_embeddings = all_train_repr[:,i,:].squeeze()
             low_embeddings = low_repr[:,i,:].squeeze()
 
-            high_dists = np.linalg.norm(high_embeddings - high_embeddings[(epoch - start) //  period], axis=1)
-            low_dists = np.linalg.norm(low_embeddings - low_embeddings[(epoch - start) //  period], axis=1)
+            high_dists = evaluate_embedding_distance(high_embeddings , high_embeddings[(epoch - start) //  period], metric=self.metric, one_target=True)
+            low_dists = evaluate_embedding_distance(low_embeddings , low_embeddings[(epoch - start) //  period], metric=self.metric, one_target=True)
+            # high_dists = np.linalg.norm(high_embeddings - high_embeddings[(epoch - start) //  period], axis=1)
+            # low_dists = np.linalg.norm(low_embeddings - low_embeddings[(epoch - start) //  period], axis=1)
             
             high_ranking = np.argsort(high_dists)
             low_ranking = np.argsort(low_dists)
@@ -436,8 +447,10 @@ class Evaluator(EvaluatorAbstractClass):
         for i in range(TEST_LEN):
             high_embeddings = all_test_repr[:,i,:].squeeze()
             low_embeddings = low_repr[:,i,:].squeeze()
-            high_dists = np.linalg.norm(high_embeddings - high_embeddings[e], axis=1)
-            low_dists = np.linalg.norm(low_embeddings - low_embeddings[e], axis=1)
+            high_dists = evaluate_embedding_distance(high_embeddings , high_embeddings[e], metric=self.metric,one_target=True)
+            low_dists = evaluate_embedding_distance(low_embeddings , low_embeddings[e], metric=self.metric, one_target=True)
+            # high_dists = np.linalg.norm(high_embeddings - high_embeddings[e], axis=1)
+            # low_dists = np.linalg.norm(low_embeddings - low_embeddings[e], axis=1)
             high_ranking = np.argsort(high_dists)
             low_ranking = np.argsort(low_dists)
             corr = evaluate_proj_temporal_weighted_global_corr(high_ranking, low_ranking)
@@ -476,8 +489,11 @@ class Evaluator(EvaluatorAbstractClass):
             high_embeddings = all_train_repr[:,i,:]
             low_embeddings = low_repr[:,i,:]
 
-            high_dists = np.linalg.norm(high_embeddings - high_embeddings[(epoch - s) //  period], axis=1)
-            low_dists = np.linalg.norm(low_embeddings - low_embeddings[(epoch - s) //  period], axis=1)
+            high_dists = evaluate_embedding_distance(high_embeddings , high_embeddings[(epoch - s) //  period], metric=self.metric, one_target=True)
+            low_dists = evaluate_embedding_distance(low_embeddings , low_embeddings[(epoch - s) //  period], metric=self.metric, one_target=True)
+            # high_dists = np.linalg.norm(high_embeddings - high_embeddings[(epoch - s) //  period], axis=1)
+            # low_dists = np.linalg.norm(low_embeddings - low_embeddings[(epoch - s) //  period], axis=1)
+
             corr, _ = stats.spearmanr(high_dists, low_dists)
             corrs[i] = corr
         return corrs.mean()
@@ -511,8 +527,11 @@ class Evaluator(EvaluatorAbstractClass):
         for i in range(TEST_LEN):
             high_embeddings = all_test_repr[:,i,:]
             low_embeddings = low_repr[:,i,:]
-            high_dists = np.linalg.norm(high_embeddings - high_embeddings[e], axis=1)
-            low_dists = np.linalg.norm(low_embeddings - low_embeddings[e], axis=1)
+            high_dists = evaluate_embedding_distance(high_embeddings , high_embeddings[e], metric=self.metric, one_target=True)
+            low_dists = evaluate_embedding_distance(low_embeddings , low_embeddings[e], metric=self.metric, one_target=True)
+            # high_dists = np.linalg.norm(high_embeddings - high_embeddings[e], axis=1)
+            # low_dists = np.linalg.norm(low_embeddings - low_embeddings[e], axis=1)
+            
             corr, _ = stats.spearmanr(high_dists, low_dists)
             corrs[i] = corr
         return corrs.mean()
@@ -562,7 +581,7 @@ class Evaluator(EvaluatorAbstractClass):
         grid_predictions_t = grid_pred_t.argmax(1)
 
         # find nearest grid samples
-        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4)
+        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4, metric=self.metric)
         high_neigh.fit(grid_view_s)
         _, knn_indices = high_neigh.kneighbors(low_s, n_neighbors=1, return_distance=True)
 
@@ -570,7 +589,7 @@ class Evaluator(EvaluatorAbstractClass):
         close_s_B = grid_s_B[knn_indices].squeeze()
         s_true = np.logical_and(close_s_pred==predictions_s, close_s_B == s_B)
         
-        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4)
+        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4, metric=self.metric)
         high_neigh.fit(grid_view_t)
         _, knn_indices = high_neigh.kneighbors(low_t, n_neighbors=1, return_distance=True)
 
@@ -627,7 +646,7 @@ class Evaluator(EvaluatorAbstractClass):
         grid_predictions_t = grid_pred_t.argmax(1)
 
         # find nearest grid samples
-        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4)
+        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4, metric=self.metric)
         high_neigh.fit(grid_view_s)
         _, knn_indices = high_neigh.kneighbors(low_s, n_neighbors=1, return_distance=True)
 
@@ -636,7 +655,7 @@ class Evaluator(EvaluatorAbstractClass):
         s_true = np.logical_and(close_s_pred==predictions_s, close_s_B == s_B)
         
 
-        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4)
+        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4, metric=self.metric)
         high_neigh.fit(grid_view_t)
         _, knn_indices = high_neigh.kneighbors(low_t, n_neighbors=1, return_distance=True)
 
@@ -650,7 +669,7 @@ class Evaluator(EvaluatorAbstractClass):
 
         return true_num, moving_sample_num
     
-    def eval_fixing_invariants_train(self, e_s, e_t, high_threshold, low_threshold, metric="euclidean"):
+    def eval_fixing_invariants_train(self, e_s, e_t, high_threshold, low_threshold):
         train_data_s = self.data_provider.train_representation(e_s)
         train_data_t = self.data_provider.train_representation(e_t)
 
@@ -672,11 +691,11 @@ class Evaluator(EvaluatorAbstractClass):
         low_t = low_t*scale
         low_s = low_s*scale
 
-        if metric == "euclidean":
+        if self.metric == "euclidean":
             high_dists = np.linalg.norm(train_data_s-train_data_t, axis=1)
-        elif metric == "cosine":
+        elif self.metric == "cosine":
             high_dists = np.array([cosine(low_t[i], low_s[i]) for i in range(len(low_s))])
-        elif metric == "softmax":
+        elif self.metric == "softmax":
             high_dists = np.array([js_div(softmax_s[i], softmax_t[i]) for i in range(len(softmax_t))])
         low_dists = np.linalg.norm(low_s-low_t, axis=1)
 
@@ -684,7 +703,7 @@ class Evaluator(EvaluatorAbstractClass):
 
         return np.sum(np.logical_and(selected, low_dists<=low_threshold)), np.sum(selected)
 
-    def eval_fixing_invariants_test(self, e_s, e_t, high_threshold, low_threshold, metric="euclidean"):
+    def eval_fixing_invariants_test(self, e_s, e_t, high_threshold, low_threshold):
         test_data_s = self.data_provider.test_representation(e_s)
         test_data_t = self.data_provider.test_representation(e_t)
 
@@ -706,11 +725,11 @@ class Evaluator(EvaluatorAbstractClass):
         low_t = low_t*scale
         low_s = low_s*scale
 
-        if metric == "euclidean":
+        if self.metric == "euclidean":
             high_dists = np.linalg.norm(test_data_s-test_data_t, axis=1)
-        elif metric == "cosine":
+        elif self.metric == "cosine":
             high_dists = np.array([cosine(low_t[i], low_s[i]) for i in range(len(low_s))])
-        elif metric == "softmax":
+        elif self.metric == "softmax":
             high_dists = np.array([js_div(softmax_s[i], softmax_t[i]) for i in range(len(softmax_t))])
         low_dists = np.linalg.norm(low_s-low_t, axis=1)
 
@@ -735,7 +754,7 @@ class Evaluator(EvaluatorAbstractClass):
         grid_predictions_s = grid_pred_s.argmax(1)
 
         # find nearest grid samples
-        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4)
+        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4, metric=self.metric)
         high_neigh.fit(grid_view_s)
         _, knn_indices = high_neigh.kneighbors(low_s, n_neighbors=1, return_distance=True)
 
@@ -769,7 +788,7 @@ class Evaluator(EvaluatorAbstractClass):
         grid_predictions_s = grid_pred_s.argmax(1)
 
         # find nearest grid samples
-        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4)
+        high_neigh = NearestNeighbors(n_neighbors=1, radius=0.4, metric=self.metric)
         high_neigh.fit(grid_view_s)
         _, knn_indices = high_neigh.kneighbors(low_s, n_neighbors=1, return_distance=True)
 
@@ -872,30 +891,30 @@ class Evaluator(EvaluatorAbstractClass):
         # evaluation["ppr_dist_train"][epoch_key] = self.eval_inv_dist_train(n_epoch)
         # evaluation["ppr_dist_test"][epoch_key] = self.eval_inv_dist_test(n_epoch)
 
-        evaluation["train_acc"][epoch_key] = self.train_acc(n_epoch)
-        evaluation["test_acc"][epoch_key] = self.test_acc(n_epoch)
+        # evaluation["train_acc"][epoch_key] = self.train_acc(n_epoch)
+        # evaluation["test_acc"][epoch_key] = self.test_acc(n_epoch)
 
-        # # local temporal
-        # if epoch_key not in evaluation["tnn_train"].keys():
-        #     evaluation["tnn_train"][epoch_key] = dict()
-        # if epoch_key not in evaluation["tnn_test"].keys():
-        #     evaluation["tnn_test"][epoch_key] = dict()
-        # evaluation["tnn_train"][epoch_key][str(temporal_k)] = self.eval_temporal_nn_train(n_epoch, temporal_k)
-        # evaluation["tnn_test"][epoch_key][str(temporal_k)] = self.eval_temporal_nn_test(n_epoch, temporal_k)
+        # local temporal
+        if epoch_key not in evaluation["tnn_train"].keys():
+            evaluation["tnn_train"][epoch_key] = dict()
+        if epoch_key not in evaluation["tnn_test"].keys():
+            evaluation["tnn_test"][epoch_key] = dict()
+        evaluation["tnn_train"][epoch_key][str(temporal_k)] = self.eval_temporal_nn_train(n_epoch, temporal_k)
+        evaluation["tnn_test"][epoch_key][str(temporal_k)] = self.eval_temporal_nn_test(n_epoch, temporal_k)
 
-        # # global temporal ranking
-        # evaluation["tr_train"][epoch_key] = self.eval_temporal_global_corr_train(n_epoch)
-        # evaluation["tr_test"][epoch_key] = self.eval_temporal_global_corr_test(n_epoch)
+        # global temporal ranking
+        evaluation["tr_train"][epoch_key] = self.eval_temporal_global_corr_train(n_epoch)
+        evaluation["tr_test"][epoch_key] = self.eval_temporal_global_corr_test(n_epoch)
         
         # weighted global temporal ranking
-        # evaluation["wtr_train"][epoch_key] = self.eval_temporal_weighted_global_corr_train(n_epoch)
-        # evaluation["wtr_test"][epoch_key] = self.eval_temporal_weighted_global_corr_test(n_epoch)
+        evaluation["wtr_train"][epoch_key] = self.eval_temporal_weighted_global_corr_train(n_epoch)
+        evaluation["wtr_test"][epoch_key] = self.eval_temporal_weighted_global_corr_test(n_epoch)
 
-        # # local temporal ranking
-        # evaluation["tlr_train"][epoch_key] = self.eval_temporal_local_corr_train(n_epoch, 3)
-        # evaluation["tlr_test"][epoch_key] = self.eval_temporal_local_corr_test(n_epoch,3)
+        # local temporal ranking
+        evaluation["tlr_train"][epoch_key] = self.eval_temporal_local_corr_train(n_epoch, 3)
+        evaluation["tlr_test"][epoch_key] = self.eval_temporal_local_corr_test(n_epoch,3)
 
-        # # temporal
+        # temporal
         # t_train_val, _ = self.eval_temporal_train(n_neighbors)
         # evaluation["temporal_train_mean"][n_key] = t_train_val
         # t_test_val, _ = self.eval_temporal_test(n_neighbors)

@@ -33,7 +33,7 @@ def evaluate_proj_nn_perseverance_knn(data, embedding, n_neighbors, metric="eucl
     nnd = NNDescent(
         embedding,
         n_neighbors=n_neighbors,
-        metric=metric,
+        metric="euclidean",
         n_trees=n_trees,
         n_iters=n_iters,
         max_candidates=60,

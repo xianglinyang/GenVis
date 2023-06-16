@@ -14,7 +14,8 @@ from torch.utils.data import WeightedRandomSampler
 from umap.umap_ import find_ab_params
 
 from singleVis.custom_weighted_random_sampler import CustomWeightedRandomSampler
-from singleVis.SingleVisualizationModel import VisModel
+# from singleVis.SingleVisualizationModel import VisModel
+from singleVis.vis_models import BN_AE
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss
 from singleVis.edge_dataset import DataHandler
 from singleVis.trainer import SingleVisTrainer
@@ -98,7 +99,8 @@ if PREPROCESS:
         data_provider._estimate_boundary(LEN//10, l_bound=L_BOUND)
 
 # Define visualization models
-model = VisModel(ENCODER_DIMS, DECODER_DIMS)
+model = BN_AE(ENCODER_DIMS, DECODER_DIMS)
+# model= VisModel(ENCODER_DIMS, DECODER_DIMS)
 
 # Define Losses
 negative_sample_rate = 5
@@ -118,7 +120,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
 # Define Edge dataset
 t0 = time.time()
-spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, I, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="cosine")
+spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, I, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean")
 
 # random sampling
 # train_data = data_provider.train_representation(I)
@@ -152,7 +154,7 @@ if len(edge_to) > pow(2,24):
     sampler = CustomWeightedRandomSampler(probs, n_samples, replacement=True)
 else:
     sampler = WeightedRandomSampler(probs, n_samples, replacement=True)
-edge_loader = DataLoader(dataset, batch_size=2000, sampler=sampler)
+edge_loader = DataLoader(dataset, batch_size=2000, sampler=sampler, num_workers=4, prefetch_factor=10, pin_memory=True)
 
 #######################################################################################################################
 #                                                       TRAIN                                                         #
@@ -203,5 +205,5 @@ vis.savefig(I, path=os.path.join(save_dir, "{}_{}_{}_{}.png".format(DATASET, I, 
 ########################################################################################################################
 #                                                       EVALUATION                                                     #
 ########################################################################################################################
-evaluator = Evaluator(data_provider, projector)
+evaluator = Evaluator(data_provider, projector, metric="euclidean")
 evaluator.save_epoch_eval(I, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))

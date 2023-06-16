@@ -190,7 +190,7 @@ lb_idxs = data_provider.get_labeled_idx(EPOCH_END)
 ulb_idxs = data_provider.get_unlabeled_idx(LEN, lb_idxs)
 
 data = data_provider.train_representation_all(EPOCH_END)
-labels = data_provider.train_labels_all(EPOCH_END)
+labels = data_provider.train_labels_all()
 pred = data_provider.get_pred(EPOCH_END, data).argmax(1)
 wrong_pred_idx = np.argwhere(pred!=labels).squeeze()
 ulb_wrong = np.intersect1d(wrong_pred_idx, ulb_idxs)

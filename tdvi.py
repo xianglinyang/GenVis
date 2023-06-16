@@ -107,7 +107,7 @@ vis = visualizer(data_provider, projector, 200, "tab10")
 save_dir = os.path.join(data_provider.content_path, "img")
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
-evaluator = Evaluator(data_provider, projector)
+evaluator = Evaluator(data_provider, projector, metric="euclidean")
 
 # start epoch
 # Define Criterion
@@ -165,7 +165,7 @@ for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_P
         sampler = CustomWeightedRandomSampler(probs, n_samples, replacement=True)
     else:
         sampler = WeightedRandomSampler(probs, n_samples, replacement=True)
-    edge_loader = DataLoader(dataset, batch_size=2000, sampler=sampler, num_workers=4, prefetch_factor=10)
+    edge_loader = DataLoader(dataset, batch_size=2000, sampler=sampler, num_workers=4, prefetch_factor=10, pin_memory=True)
 
     ########################################################################################################################
     #                                                       TRAIN                                                          #

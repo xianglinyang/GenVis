@@ -5,6 +5,8 @@ import os
 import time
 import math
 import json
+import scipy
+import numba
 
 from umap.umap_ import fuzzy_simplicial_set, make_epochs_per_sample
 from pynndescent import NNDescent
@@ -21,6 +23,37 @@ def normalize_data(train_data):
     train_min = train_data.min(axis=0)
     train_data = (train_data - train_max)/(train_max-train_min)
     return train_data
+
+# @numba.njit(
+# locals={
+#     "knn_dists": numba.types.float32[:, ::1],
+#     "val": numba.types.float32,
+# },
+# parallel=True,
+# fastmath=True,
+# )
+def cosine_fuzzy_set(knn_indices, knn_dists, n_neighbors):
+    # construct a fuzzy_simplicial_set
+    knn_dists = knn_dists.astype(np.float32)
+    n_samples = knn_indices.shape[0]
+
+    rows = np.zeros(knn_indices.size, dtype=np.int32)
+    cols = np.zeros(knn_indices.size, dtype=np.int32)
+    vals = np.zeros(knn_indices.size, dtype=np.float32)
+
+    for i in range(n_samples):
+        for j in range(n_neighbors):
+            if knn_indices[i, j] == -1:
+                continue  
+            if knn_indices[i, j] == i:
+                val = 0.0
+            else:
+                val = (1 - knn_dists[i][j])/2
+
+            rows[i * n_neighbors + j] = i
+            cols[i * n_neighbors + j] = knn_indices[i, j]
+            vals[i * n_neighbors + j] = val
+    return rows, cols, vals
 
 class SpatialEdgeConstructorAbstractClass(ABC):
     @abstractmethod
@@ -135,27 +168,46 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         # # ignore the structure of prev_data
         # knn_dists = np.concatenate((knn_dists, np.zeros_like(knn_dists)), axis=0)
         # knn_indices = np.concatenate((knn_indices, -np.ones_like(knn_indices)), axis=0)
-
+        n_neighbors = 2
+        
         # cosine distance
-        high_neigh = NearestNeighbors(n_neighbors=self.n_neighbors, radius=0.4, metric=self.metric)
+        high_neigh = NearestNeighbors(n_neighbors=n_neighbors, radius=0.4, metric="cosine")
         high_neigh.fit(prev_data)
         fitting_data = np.concatenate((next_data, prev_data), axis=0)
-        knn_dists, knn_indices = high_neigh.kneighbors(next_data, n_neighbors=self.n_neighbors, return_distance=True)
+        knn_dists, knn_indices = high_neigh.kneighbors(next_data, n_neighbors=n_neighbors, return_distance=True)
         knn_indices = knn_indices + len(next_data) + b_num
         # ignore the structure of prev_data
         knn_dists = np.concatenate((knn_dists, np.zeros_like(knn_dists)), axis=0)
         knn_indices = np.concatenate((knn_indices, -np.ones_like(knn_indices)), axis=0)
 
-        random_state = check_random_state(None)
-        complex, sigmas, rhos = fuzzy_simplicial_set(
-            X=fitting_data,
-            n_neighbors=self.n_neighbors,
-            metric=self.metric,
-            random_state=random_state,
-            knn_indices=knn_indices,
-            knn_dists=knn_dists,
+        # random_state = check_random_state(None)
+        # complex, sigmas, rhos = fuzzy_simplicial_set(
+        #     X=fitting_data,
+        #     n_neighbors=self.n_neighbors,
+        #     metric=self.metric,
+        #     random_state=random_state,
+        #     knn_indices=knn_indices,
+        #     knn_dists=knn_dists,
+        # )
+        rows, cols, vals = cosine_fuzzy_set(knn_indices, knn_dists, n_neighbors)
+
+        result = scipy.sparse.coo_matrix(
+            (vals, (rows, cols)), shape=(fitting_data.shape[0], fitting_data.shape[0])
         )
-        return complex, sigmas, rhos, knn_indices
+        result.eliminate_zeros()
+
+        transpose = result.transpose()
+        prod_matrix = result.multiply(transpose)
+        set_op_mix_ratio = 1.0
+        result = (
+            set_op_mix_ratio * (result + transpose - prod_matrix)
+            + (1.0 - set_op_mix_ratio) * prod_matrix
+        )
+
+        result.eliminate_zeros()
+        # return result, sigmas, rhos
+
+        return result
     
     def _construct_step_edge_dataset(self, vr_complex, bw_complex, t_complex=None):
         """
@@ -163,6 +215,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
             connect border points and train data(both direction)
         :param vr_complex: Vietoris-Rips complex
         :param bw_complex: boundary-augmented complex
+        :param t_complex: temporal-wise complex
         :param n_epochs: the number of epoch that we iterate each round
         :return: edge dataset
         """
@@ -1063,19 +1116,16 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         prev_data = prev_data[selected]
         prev_embedded = prev_embedding[selected]
 
-        # prev_data = normalize_data(prev_data)
         next_data = self.data_provider.train_representation(next_iter)
-        # next_data = normalize_data(next_data)
-
-        # selected = np.random.choice(len(train_data), int(0.5*len(train_data)), replace=False)
-        # train_data = train_data[selected]
+        # selected = np.random.choice(len(next_data), int(0.2*len(next_data)), replace=False)
+        # next_data = next_data[selected]
 
         # concatenate prev_data to the last
         if self.b_n_epochs > 0:
             border_centers = self.data_provider.border_representation(self.next_iter).squeeze()
             complex, _, _, _ = self._construct_fuzzy_complex(next_data)
             bw_complex, _, _, _ = self._construct_boundary_wise_complex(next_data, border_centers)
-            t_complex, _, _ = self._construct_local_temporal_complex(prev_data, next_data, b_num=len(border_centers))
+            t_complex = self._construct_local_temporal_complex(prev_data, next_data, b_num=len(border_centers))
             edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, bw_complex, t_complex)
             feature_vectors = np.concatenate((next_data, border_centers, prev_data), axis=0)
             # pred_model = self.data_provider.prediction_function(self.iteration)
@@ -1083,7 +1133,7 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             attention = np.zeros(feature_vectors.shape)
         elif self.b_n_epochs == 0:
             complex, _, _, _ = self._construct_fuzzy_complex(next_data)
-            t_complex, _, _, _ = self._construct_local_temporal_complex(prev_data, next_data)
+            t_complex = self._construct_local_temporal_complex(prev_data, next_data)
             edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, None, t_complex)
             feature_vectors = np.concatenate((next_data, prev_data), axis=0)
             # pred_model = self.data_provider.prediction_function(self.iteration)

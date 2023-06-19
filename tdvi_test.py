@@ -14,7 +14,8 @@ from torch.utils.data import WeightedRandomSampler
 from umap.umap_ import find_ab_params
 
 from singleVis.custom_weighted_random_sampler import CustomWeightedRandomSampler
-from singleVis.SingleVisualizationModel import VisModel
+# from singleVis.SingleVisualizationModel import VisModel
+from singleVis.vis_models import BN_AE
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss, LocalTemporalLoss, SmoothnessLoss
 from singleVis.edge_dataset import DVIDataHandler, LocalTemporalDataHandler
 from singleVis.trainer import DVITrainer, SingleVisTrainer, LocalTemporalTrainer
@@ -85,7 +86,7 @@ net = eval("subject_model.{}()".format(NET))
 # Define data_provider
 data_provider = NormalDataProvider(CONTENT_PATH, net, EPOCH_START, EPOCH_END, EPOCH_PERIOD, device=DEVICE, classes=CLASSES, epoch_name=EPOCH_NAME, verbose=1)
 # Define visualization models
-model = VisModel(ENCODER_DIMS, DECODER_DIMS)
+model = BN_AE(ENCODER_DIMS, DECODER_DIMS)
 
 # Define Projector
 projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, epoch_name=EPOCH_NAME, device=DEVICE)
@@ -98,5 +99,5 @@ evaluator = Evaluator(data_provider, projector, metric="euclidean")
 
 # save_dir = os.path.join(data_provider.content_path, "img")
 # vis.savefig(EPOCH_START, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, EPOCH_START, VIS_METHOD)))
-evaluator.save_epoch_eval(EPOCH_START, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
+evaluator.save_epoch_eval(EPOCH_END, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
 

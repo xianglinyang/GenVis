@@ -68,7 +68,6 @@ class ContinualNormAE(BaseVisModel):
                 nn.Sequential(
                 nn.Linear(self.encoder_dims[i], self.encoder_dims[i+1]),
                 ContinualNorm(8, self.encoder_dims[i+1]),
-                nn.InstanceNorm1d(self.encoder_dims[i+1]),
                 nn.ReLU(True) 
                 )
             )
@@ -84,7 +83,6 @@ class ContinualNormAE(BaseVisModel):
                     ContinualNorm(8, self.decoder_dims[i+1]),
                     nn.ReLU(True)
                 )
-                
             )
         modules.append(nn.Linear(self.decoder_dims[-2], self.decoder_dims[-1]))
         self.decoder = nn.Sequential(*modules)

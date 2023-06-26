@@ -39,7 +39,6 @@ class BatchNormAE(BaseVisModel):
                     nn.BatchNorm1d(self.decoder_dims[i+1]),
                     nn.ReLU(True)
                 )
-                
             )
         modules.append(nn.Linear(self.decoder_dims[-2], self.decoder_dims[-1]))
         self.decoder = nn.Sequential(*modules)

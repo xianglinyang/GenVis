@@ -51,10 +51,10 @@ class ContinualNorm(nn.Module):
         return out
 
 
-class CN_AE(BaseVisModel):
+class ContinualNormAE(BaseVisModel):
 
     def __init__(self, encoder_dims, decoder_dims):
-        super(CN_AE, self).__init__()
+        super(ContinualNormAE, self).__init__()
   
         assert len(encoder_dims) > 1
         assert len(decoder_dims) > 1

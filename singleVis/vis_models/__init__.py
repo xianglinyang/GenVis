@@ -1,12 +1,16 @@
 '''https://github.com/AntixK/PyTorch-VAE'''
-from .base import BaseVisModel
-from .norm_ae import BN_AE, LN_AE, IN_AE
-from .cn import CN_AE
+from .base import AE
+from .batch_norm import BatchNormAE
+from .layer_norm import LayerNormAE
+from .instance_norm import InstanceNormAE
+from .group_norm import GroupNormAE
+from .continual_norm import ContinualNormAE
 
 vis_models = {
-    'AE': BaseVisModel,
-    'AEBatchNorm': BN_AE,
-    'AELayerNorm': LN_AE,
-    'AEInstanceNorm': IN_AE,
-    "AEContinualNorm": CN_AE
+    'AE': AE,
+    'bnAE': BatchNormAE,
+    'lnAE': LayerNormAE,
+    'inAE': InstanceNormAE,
+    'gnAE': GroupNormAE,
+    'cnAE': ContinualNormAE
 }

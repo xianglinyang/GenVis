@@ -14,11 +14,10 @@ from torch.utils.data import WeightedRandomSampler
 from umap.umap_ import find_ab_params
 
 from singleVis.custom_weighted_random_sampler import CustomWeightedRandomSampler
-# from singleVis.SingleVisualizationModel import VisModel
-from singleVis.vis_models import BN_AE
+from singleVis.vis_models import vis_models as vmodels
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss, LocalTemporalLoss, SmoothnessLoss
 from singleVis.edge_dataset import DVIDataHandler, LocalTemporalDataHandler
-from singleVis.trainer import DVITrainer, SingleVisTrainer, LocalTemporalTrainer
+from singleVis.trainer import SingleVisTrainer, LocalTemporalTrainer
 from singleVis.data import NormalDataProvider
 from singleVis.spatial_edge_constructor import LocalSpatialTemporalEdgeConstructor, SingleEpochSpatialEdgeConstructor
 from singleVis.projector import DVIProjector
@@ -28,7 +27,7 @@ from singleVis.visualizer import visualizer
 #                                                     DVI PARAMETERS                                                   #
 ########################################################################################################################
 """DVI with semantic temporal edges"""
-VIS_METHOD = "tDVI" 
+VIS_METHOD = "tDVI"
 
 ########################################################################################################################
 #                                                     LOAD PARAMETERS                                                  #
@@ -60,6 +59,7 @@ LEN = TRAINING_PARAMETER["train_num"]
 
 # Training parameter (visualization model)
 VISUALIZATION_PARAMETER = config["VISUALIZATION"]
+VIS_MODEL = VISUALIZATION_PARAMETER["VIS_MODEL"]
 LAMBDA1 = VISUALIZATION_PARAMETER["LAMBDA1"]
 B_N_EPOCHS = VISUALIZATION_PARAMETER["BOUNDARY"]["B_N_EPOCHS"]
 L_BOUND = VISUALIZATION_PARAMETER["BOUNDARY"]["L_BOUND"]
@@ -91,10 +91,9 @@ if PREPROCESS:
         data_provider._estimate_boundary(LEN//10, l_bound=L_BOUND)
 
 # Define visualization models
-# model = VisModel(ENCODER_DIMS, DECODER_DIMS)
-model = BN_AE(ENCODER_DIMS, DECODER_DIMS)
+model = vmodels[VIS_MODEL](ENCODER_DIMS, DECODER_DIMS)
 
-# Define Losses/home/xianglin/projects/DVI_data/resnet18_mnist
+# Define Losses
 negative_sample_rate = 5
 min_dist = .1
 _a, _b = find_ab_params(1.0, min_dist)
@@ -135,18 +134,18 @@ edge_loader = DataLoader(dataset, batch_size=1000, sampler=sampler, num_workers=
 
 # train
 trainer = SingleVisTrainer(model, criterion, optimizer, lr_scheduler,edge_loader=edge_loader, DEVICE=DEVICE)
-t2=time.time()
-trainer.train(PATIENT, MAX_EPOCH)
-t3 = time.time()
+train_epoch, time_spent = trainer.train(PATIENT, MAX_EPOCH)
 
 save_dir = os.path.join(data_provider.model_path, "Epoch_{}".format(EPOCH_START))
 trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
+trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), key="training", t=(train_epoch, time_spent))
+
 save_dir = os.path.join(data_provider.content_path, "img")
-vis.savefig(EPOCH_START, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, EPOCH_START, VIS_METHOD)))
+vis.savefig(EPOCH_START, path=os.path.join(save_dir, "{}_{}_{}.png".format(VIS_METHOD, VIS_MODEL, EPOCH_START)))
 evaluator.save_epoch_eval(EPOCH_START, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
+
 # get prev_embedding
 prev_embedding = projector.batch_project(EPOCH_START, data_provider.train_representation(EPOCH_START))
-
 for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
     # Define Criterion
     criterion = LocalTemporalLoss(umap_loss_fn, recon_loss_fn, smooth_loss_fn, lambd=LAMBDA1)
@@ -154,8 +153,8 @@ for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_P
     optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
     # Define Edge dataset
-    t0 = time.time()
     spatial_cons = LocalSpatialTemporalEdgeConstructor(data_provider, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean")
+    t0 = time.time()
     edge_to, edge_from, probs, feature_vectors, attention, coefficient, embedded = spatial_cons.construct(iteration-EPOCH_PERIOD, iteration, prev_embedding)
     t1 = time.time()
     
@@ -175,15 +174,15 @@ for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_P
 
     trainer = LocalTemporalTrainer(model, criterion, optimizer, lr_scheduler,edge_loader=edge_loader, DEVICE=DEVICE)
 
-    t2=time.time()
-    trainer.train(PATIENT, MAX_EPOCH)
-    t3 = time.time()
+    train_epoch, time_spent = trainer.train(PATIENT, MAX_EPOCH)
 
     save_dir = os.path.join(data_provider.model_path, "Epoch_{}".format(iteration))
     trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
+    trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), key="training", t=(train_epoch, time_spent))
+    trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), key="complex", t=(t1-t0))
 
     save_dir = os.path.join(data_provider.content_path, "img")
-    vis.savefig(iteration, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, iteration, VIS_METHOD)))
+    vis.savefig(iteration, path=os.path.join(save_dir, "{}_{}_{}.png".format(VIS_METHOD, VIS_MODEL, iteration)))
     evaluator.save_epoch_eval(iteration, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
 
     # get prev_embedding

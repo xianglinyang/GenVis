@@ -68,7 +68,6 @@ class TrainerAbstractClass(ABC):
         pass
 
 
-
 class SingleVisTrainer(TrainerAbstractClass):
     def __init__(self, model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE):
         self.model = model
@@ -77,7 +76,11 @@ class SingleVisTrainer(TrainerAbstractClass):
         self.lr_scheduler = lr_scheduler
         self.DEVICE = DEVICE
         self.edge_loader = edge_loader
-        self._loss = 100.0
+        self._loss = {
+            'loss': list(),
+            'umap': list(),
+            'recon':list()
+        }
 
     @property
     def loss(self):
@@ -102,7 +105,7 @@ class SingleVisTrainer(TrainerAbstractClass):
     def update_lr_scheduler(self, lr_scheduler):
         self.lr_scheduler = lr_scheduler
 
-    def train_step(self):
+    def train_step(self, verbose=1):
         self.model.to(device=self.DEVICE)
         self.model.train()
         all_loss = []
@@ -129,11 +132,17 @@ class SingleVisTrainer(TrainerAbstractClass):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-        self._loss = sum(all_loss) / len(all_loss)
+        # record loss history
+        self._loss['loss'].append(sum(all_loss) / len(all_loss))
+        self._loss['umap'].append(sum(umap_losses) / len(umap_losses))
+        self._loss['recon'].append(sum(recon_losses) / len(recon_losses))
         self.model.eval()
-        print('umap:{:.4f}\trecon_l:{:.4f}\tloss:{:.4f}'.format(sum(umap_losses) / len(umap_losses),
-                                                                sum(recon_losses) / len(recon_losses),
-                                                                sum(all_loss) / len(all_loss)))
+        if verbose:
+            message = (f"umap:{self._loss['umap'][-1]:.4f}\t",
+                       f"recon:{self._loss['recon'][-1]:.4f}\t",
+                       f"loss:{self._loss['loss'][-1]:.4f}"
+                    )
+            print(message)
         return self.loss
 
     def train(self, PATIENT, MAX_EPOCH_NUMS):
@@ -141,8 +150,8 @@ class SingleVisTrainer(TrainerAbstractClass):
         time_start = time.time()
         for epoch in range(MAX_EPOCH_NUMS):
             print("====================\nepoch:{}\n===================".format(epoch+1))
-            prev_loss = self.loss
-            loss = self.train_step()
+            prev_loss = self.loss['loss'][-1]
+            loss = self.train_step()['loss'][-1]
             self.lr_scheduler.step()
             # early stop, check whether converge or not
             if prev_loss - loss < 5E-3:
@@ -156,6 +165,8 @@ class SingleVisTrainer(TrainerAbstractClass):
         time_end = time.time()
         time_spend = time_end - time_start
         print("Time spend: {:.2f} for training vis model...".format(time_spend))
+        return epoch+1, round(time_spend, 3)
+
 
     def load(self, file_path):
         """
@@ -192,7 +203,7 @@ class SingleVisTrainer(TrainerAbstractClass):
             f = open(save_file, "r")
             evaluation = json.load(f)
             f.close()
-        evaluation[key] = round(t, 3)
+        evaluation[key] = t
         with open(save_file, 'w') as f:
             json.dump(evaluation, f)
 
@@ -200,8 +211,9 @@ class SingleVisTrainer(TrainerAbstractClass):
 class HybridVisTrainer(SingleVisTrainer):
     def __init__(self, model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE):
         super().__init__(model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE)
+        self._loss['smooth'] = list()
 
-    def train_step(self):
+    def train_step(self, verbose=1):
         self.model = self.model.to(device=self.DEVICE)
         self.model.train()
         all_loss = []
@@ -231,12 +243,18 @@ class HybridVisTrainer(SingleVisTrainer):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-        self._loss = sum(all_loss) / len(all_loss)
+        self._loss['loss'].append(sum(all_loss) / len(all_loss))
+        self._loss['umap'].append(sum(umap_losses) / len(umap_losses))
+        self._loss['recon'].append(sum(recon_losses) / len(recon_losses))
+        self._loss['smooth'].append(sum(smooth_losses) / len(smooth_losses))
         self.model.eval()
-        print('umap:{:.4f}\trecon_l:{:.4f}\tsmooth_l:{:.4f}\tloss:{:.4f}'.format(sum(umap_losses) / len(umap_losses),
-                                                                sum(recon_losses) / len(recon_losses),
-                                                                sum(smooth_losses) / len(smooth_losses),
-                                                                sum(all_loss) / len(all_loss)))
+        if verbose:
+            message = (f"umap:{self._loss['umap'][-1]:.4f}\t",
+                       f"recon:{self._loss['recon'][-1]:.4f}\t",
+                       f"smooth:{self._loss['smooth'][-1]:.4f}\t",
+                       f"loss:{self._loss['loss'][-1]:.4f}\t"
+                       )
+            print(message)
         return self.loss
     
     def record_time(self, save_dir, file_name, operation, seg, t):
@@ -258,8 +276,9 @@ class HybridVisTrainer(SingleVisTrainer):
 class DVITrainer(SingleVisTrainer):
     def __init__(self, model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE):
         super().__init__(model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE)
+        self._loss["temporal"] = list()
     
-    def train_step(self):
+    def train_step(self, verbose=1):
         self.model = self.model.to(device=self.DEVICE)
         self.model.train()
         all_loss = []
@@ -287,12 +306,18 @@ class DVITrainer(SingleVisTrainer):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-        self._loss = sum(all_loss) / len(all_loss)
+        self._loss['loss'].append(sum(all_loss) / len(all_loss))
+        self._loss['umap'].append(sum(umap_losses) / len(umap_losses))
+        self._loss['recon'].append(sum(recon_losses) / len(recon_losses))
+        self._loss['temporal'].append(sum(temporal_losses) / len(temporal_losses))
         self.model.eval()
-        print('umap:{:.4f}\trecon_l:{:.4f}\ttemporal_l:{:.4f}\tloss:{:.4f}'.format(sum(umap_losses) / len(umap_losses),
-                                                                sum(recon_losses) / len(recon_losses),
-                                                                sum(temporal_losses) / len(temporal_losses),
-                                                                sum(all_loss) / len(all_loss)))
+        if verbose:
+            message = (f"umap:{self._loss['umap'][-1]:.4f}\t",
+                       f"recon:{self._loss['recon'][-1]:.4f}\t",
+                       f"temporal:{self._loss['temporal'][-1]:.4f}\t",
+                       f"loss:{self._loss['loss'][-1]:.4f}\t"
+                       )
+            print(message)
         return self.loss
     
     def record_time(self, save_dir, file_name, operation, iteration, t):
@@ -313,8 +338,9 @@ class DVITrainer(SingleVisTrainer):
 class LocalTemporalTrainer(SingleVisTrainer):
     def __init__(self, model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE):
         super().__init__(model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE)
+        self._loss['smooth']=list()
     
-    def train_step(self):
+    def train_step(self, verbose=1):
         self.model = self.model.to(device=self.DEVICE)
         self.model.train()
         all_loss = []
@@ -334,8 +360,6 @@ class LocalTemporalTrainer(SingleVisTrainer):
             coeffi_from = coeffi_from.to(device=self.DEVICE, dtype=torch.bool)
             embedded_from = embedded_from.to(device=self.DEVICE, dtype=torch.float32)
 
-            # embedded_from[coeffi_from.to(torch.bool)].requires_grad = False
-
             outputs = self.model(edge_to, edge_from)
             umap_l, recon_l, smooth_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, coeffi_from, embedded_from, outputs)
             all_loss.append(loss.item())
@@ -346,9 +370,18 @@ class LocalTemporalTrainer(SingleVisTrainer):
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-        self._loss = sum(all_loss) / len(all_loss)
+        self._loss['loss'].append(sum(all_loss) / len(all_loss))
+        self._loss['umap'].append(sum(umap_losses) / len(umap_losses))
+        self._loss['recon'].append(sum(recon_losses) / len(recon_losses))
+        self._loss['smooth'].append(sum(smooth_losses) / len(smooth_losses))
         self.model.eval()
-        print(f'umap spatial:{sum(umap_losses) / len(umap_losses):.4f}\tsmooth:{sum(smooth_losses) / len(smooth_losses):.4f}\trecon_l:{sum(recon_losses) / len(recon_losses):.4f}\tloss:{sum(all_loss) / len(all_loss):.4f}')
+        if verbose:
+            message = (f"umap:{self._loss['umap'][-1]:.4f}\t",
+                       f"recon:{self._loss['recon'][-1]:.4f}\t",
+                       f"smooth:{self._loss['smooth'][-1]:.4f}\t",
+                       f"loss:{self._loss['loss'][-1]:.4f}\t"
+                       )
+            print(message)
         return self.loss
     
     def record_time(self, save_dir, file_name, operation, iteration, t):

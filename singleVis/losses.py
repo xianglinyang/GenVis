@@ -15,22 +15,12 @@ class Loss(nn.Module):
         pass
 
 class UmapLoss(nn.Module):
-    def __init__(self, negative_sample_rate, device, _a=1.0, _b=1.0, repulsion_strength=1.0):
+    def __init__(self, negative_sample_rate, _a=1.0, _b=1.0, repulsion_strength=1.0):
         super(UmapLoss, self).__init__()
-
         self._negative_sample_rate = negative_sample_rate
-        self._a = _a,
-        self._b = _b,
+        self.a = _a
+        self.b = _b
         self._repulsion_strength = repulsion_strength
-        self.DEVICE = torch.device(device)
-
-    @property
-    def a(self):
-        return self._a[0]
-
-    @property
-    def b(self):
-        return self._b[0]
 
     def forward(self, embedding_to, embedding_from):
         batch_size = embedding_to.shape[0]
@@ -53,13 +43,13 @@ class UmapLoss(nn.Module):
         probabilities_distance = convert_distance_to_probability(
             distance_embedding, self.a, self.b
         )
-        probabilities_distance = probabilities_distance.to(self.DEVICE)
 
         # set true probabilities based on negative sampling
-        probabilities_graph = torch.cat(
-            (torch.ones(batch_size), torch.zeros(batch_size * self._negative_sample_rate)), dim=0,
-        )
-        probabilities_graph = probabilities_graph.to(device=self.DEVICE)
+        probabilities_graph = torch.zeros_like(probabilities_distance)
+        probabilities_graph[:batch_size] = 1
+        # probabilities_graph = torch.cat(
+        #     (torch.ones(batch_size, device=probabilities_distance.device), torch.zeros(batch_size * self._negative_sample_rate, device=probabilities_distance.device)), dim=0,
+        # )
 
         # compute cross entropy
         (_, _, ce_loss) = compute_cross_entropy(

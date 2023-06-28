@@ -23,6 +23,12 @@ from singleVis.spatial_edge_constructor import LocalSpatialTemporalEdgeConstruct
 from singleVis.projector import DVIProjector
 from singleVis.eval.evaluator import Evaluator
 from singleVis.visualizer import visualizer
+
+# TODO when recording, use timestamp to differentiate different runs
+# record output information
+# now = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime(time.time())) 
+# sys.stdout = open(os.path.join(CONTENT_PATH, now+".txt"), "w")
+
 ########################################################################################################################
 #                                                     DVI PARAMETERS                                                   #
 ########################################################################################################################
@@ -97,7 +103,7 @@ model = vmodels[VIS_MODEL](ENCODER_DIMS, DECODER_DIMS)
 negative_sample_rate = 5
 min_dist = .1
 _a, _b = find_ab_params(1.0, min_dist)
-umap_loss_fn = UmapLoss(negative_sample_rate, DEVICE, _a, _b, repulsion_strength=1.0)
+umap_loss_fn = UmapLoss(negative_sample_rate, _a, _b, repulsion_strength=1.0)
 recon_loss_fn = ReconstructionLoss(beta=1.0)
 smooth_loss_fn = SmoothnessLoss(margin=0.0)
 single_loss_fn = SingleVisLoss(umap_loss_fn, recon_loss_fn, lambd=LAMBDA1)
@@ -138,7 +144,23 @@ train_epoch, time_spent = trainer.train(PATIENT, MAX_EPOCH)
 
 save_dir = os.path.join(data_provider.model_path, "Epoch_{}".format(EPOCH_START))
 trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
-trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), key="training", t=(train_epoch, time_spent))
+# save time result
+##########################
+# TODO tidy up
+save_file = os.path.join(data_provider.model_path,"time_{}.json".format(VIS_MODEL_NAME))
+if not os.path.exists(save_file):
+    evaluation = dict()
+else:
+    f = open(save_file, "r")
+    evaluation = json.load(f)
+    f.close()
+operation = "training"
+if operation not in evaluation.keys():
+    evaluation[operation] = dict()
+evaluation[operation][str(EPOCH_START)] = (train_epoch, time_spent)
+with open(save_file, 'w') as f:
+    json.dump(evaluation, f)
+##########################
 
 save_dir = os.path.join(data_provider.content_path, "img")
 vis.savefig(EPOCH_START, path=os.path.join(save_dir, "{}_{}_{}.png".format(VIS_METHOD, VIS_MODEL, EPOCH_START)))
@@ -178,8 +200,8 @@ for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_P
 
     save_dir = os.path.join(data_provider.model_path, "Epoch_{}".format(iteration))
     trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
-    trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), key="training", t=(train_epoch, time_spent))
-    trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), key="complex", t=(t1-t0))
+    trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), operation="training", iteration=str(iteration), t=(train_epoch, time_spent))
+    trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), operation="complex", iteration=str(iteration), t=(t1-t0))
 
     save_dir = os.path.join(data_provider.content_path, "img")
     vis.savefig(iteration, path=os.path.join(save_dir, "{}_{}_{}.png".format(VIS_METHOD, VIS_MODEL, iteration)))

@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import torch
 from torch import nn
+import torch.nn.functional as F
 from singleVis.backend import compute_cross_entropy_tf, convert_distance_to_probability, compute_cross_entropy
 
 """Losses modules for preserving four propertes"""
@@ -29,9 +30,12 @@ class UmapLoss(nn.Module):
         # get negative samples
         embedding_neg_to = torch.repeat_interleave(embedding_to, self._negative_sample_rate, dim=0)
         repeat_neg = torch.repeat_interleave(embedding_from, self._negative_sample_rate, dim=0)
-        randperm = torch.randperm(repeat_neg.shape[0])
+        randperm = torch.randperm(batch_size*self._negative_sample_rate)
         embedding_neg_from = repeat_neg[randperm]
 
+        # distance_embedding = torch.zeros(batch_size*(1+self._negative_sample_rate), device=embedding_to.device)
+        # distance_embedding[:batch_size] = torch.sqrt((embedding_to - embedding_from).pow(2).sum(1))
+        # distance_embedding[batch_size:] = torch.sqrt((embedding_neg_to - embedding_neg_from).pow(2).sum(1))
         #  distances between samples (and negative samples)
         distance_embedding = torch.cat(
             (
@@ -47,9 +51,6 @@ class UmapLoss(nn.Module):
         # set true probabilities based on negative sampling
         probabilities_graph = torch.zeros_like(probabilities_distance)
         probabilities_graph[:batch_size] = 1
-        # probabilities_graph = torch.cat(
-        #     (torch.ones(batch_size, device=probabilities_distance.device), torch.zeros(batch_size * self._negative_sample_rate, device=probabilities_distance.device)), dim=0,
-        # )
 
         # compute cross entropy
         (_, _, ce_loss) = compute_cross_entropy(
@@ -58,7 +59,7 @@ class UmapLoss(nn.Module):
             repulsion_strength=self._repulsion_strength,
         )
 
-        return torch.mean(ce_loss)
+        return torch.mean(ce_loss )
 
 
 class ReconstructionLoss(nn.Module):
@@ -67,12 +68,13 @@ class ReconstructionLoss(nn.Module):
         self._beta = beta
 
     def forward(self, edge_to, edge_from, recon_to, recon_from, a_to, a_from):
-        loss1 = torch.mean(torch.mean(torch.multiply(torch.pow((1+a_to), self._beta), torch.pow(edge_to - recon_to, 2)), 1))
-        loss2 = torch.mean(torch.mean(torch.multiply(torch.pow((1+a_from), self._beta), torch.pow(edge_from - recon_from, 2)), 1))
+        return (F.mse_loss(edge_to, recon_to)+F.mse_loss(edge_from, recon_from))/2
+        # loss1 = torch.mean(torch.mean(torch.multiply(torch.pow((1+a_to), self._beta), torch.pow(edge_to - recon_to, 2)), 1))
+        # loss2 = torch.mean(torch.mean(torch.multiply(torch.pow((1+a_from), self._beta), torch.pow(edge_from - recon_from, 2)), 1))
         # without attention weights
         # loss1 = torch.mean(torch.mean(torch.pow(edge_to - recon_to, 2), 1))
         # loss2 = torch.mean(torch.mean(torch.pow(edge_from - recon_from, 2), 1))
-        return (loss1 + loss2)/2
+        # return (loss1 + loss2)/2
         # return loss1
 
 
@@ -195,8 +197,7 @@ class LocalTemporalLoss(nn.Module):
         embedding_to, embedding_from = outputs["umap"]
         recon_to, recon_from = outputs["recon"]
 
-        recon_l  = torch.mean(torch.mean(torch.multiply(torch.pow((1+a_to), 1), torch.pow(edge_to - recon_to, 2)), 1))
-        # recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from, a_to, a_from)
+        recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from, a_to, a_from)
         # recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from)
 
         # split embedding into two pools, grad_required and stop gradient

@@ -138,9 +138,7 @@ class SingleVisTrainer(TrainerAbstractClass):
         self._loss['recon'].append(sum(recon_losses) / len(recon_losses))
         self.model.eval()
         if verbose:
-            message = (f"umap:{self._loss['umap'][-1]:.4f}\t",
-                       f"recon:{self._loss['recon'][-1]:.4f}\t",
-                       f"loss:{self._loss['loss'][-1]:.4f}"
+            message = (f"umap:{self._loss['umap'][-1]:.4f}\trecon:{self._loss['recon'][-1]:.4f}\tloss:{self._loss['loss'][-1]:.4f}"
                     )
             print(message)
         return self.loss
@@ -150,7 +148,7 @@ class SingleVisTrainer(TrainerAbstractClass):
         time_start = time.time()
         for epoch in range(MAX_EPOCH_NUMS):
             print("====================\nepoch:{}\n===================".format(epoch+1))
-            prev_loss = self.loss['loss'][-1]
+            prev_loss = self.loss['loss'][-1] if len(self.loss['loss'])>0 else 100
             loss = self.train_step()['loss'][-1]
             self.lr_scheduler.step()
             # early stop, check whether converge or not
@@ -249,10 +247,7 @@ class HybridVisTrainer(SingleVisTrainer):
         self._loss['smooth'].append(sum(smooth_losses) / len(smooth_losses))
         self.model.eval()
         if verbose:
-            message = (f"umap:{self._loss['umap'][-1]:.4f}\t",
-                       f"recon:{self._loss['recon'][-1]:.4f}\t",
-                       f"smooth:{self._loss['smooth'][-1]:.4f}\t",
-                       f"loss:{self._loss['loss'][-1]:.4f}\t"
+            message = (f"umap:{self._loss['umap'][-1]:.4f}\trecon:{self._loss['recon'][-1]:.4f}\tsmooth:{self._loss['smooth'][-1]:.4f}\tloss:{self._loss['loss'][-1]:.4f}\t"
                        )
             print(message)
         return self.loss
@@ -312,11 +307,7 @@ class DVITrainer(SingleVisTrainer):
         self._loss['temporal'].append(sum(temporal_losses) / len(temporal_losses))
         self.model.eval()
         if verbose:
-            message = (f"umap:{self._loss['umap'][-1]:.4f}\t",
-                       f"recon:{self._loss['recon'][-1]:.4f}\t",
-                       f"temporal:{self._loss['temporal'][-1]:.4f}\t",
-                       f"loss:{self._loss['loss'][-1]:.4f}\t"
-                       )
+            message = f"umap:{self._loss['umap'][-1]:.4f}\trecon:{self._loss['recon'][-1]:.4f}\ttemporal:{self._loss['temporal'][-1]:.4f}\tloss:{self._loss['loss'][-1]:.4f}\t"
             print(message)
         return self.loss
     
@@ -376,11 +367,7 @@ class LocalTemporalTrainer(SingleVisTrainer):
         self._loss['smooth'].append(sum(smooth_losses) / len(smooth_losses))
         self.model.eval()
         if verbose:
-            message = (f"umap:{self._loss['umap'][-1]:.4f}\t",
-                       f"recon:{self._loss['recon'][-1]:.4f}\t",
-                       f"smooth:{self._loss['smooth'][-1]:.4f}\t",
-                       f"loss:{self._loss['loss'][-1]:.4f}\t"
-                       )
+            message = f"umap:{self._loss['umap'][-1]:.4f}\trecon:{self._loss['recon'][-1]:.4f}\tsmooth:{self._loss['smooth'][-1]:.4f}\tloss:{self._loss['loss'][-1]:.4f}\t"
             print(message)
         return self.loss
     
@@ -395,6 +382,6 @@ class LocalTemporalTrainer(SingleVisTrainer):
             f.close()
         if operation not in evaluation.keys():
             evaluation[operation] = dict()
-        evaluation[operation][iteration] = round(t, 3)
+        evaluation[operation][iteration] = t
         with open(save_file, 'w') as f:
             json.dump(evaluation, f)

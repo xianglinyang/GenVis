@@ -6,7 +6,23 @@ import torch
 import torch.nn as nn
 from .base import BaseVisModel
 
+from torch.nn.modules.batchnorm import _BatchNorm
+from torch.nn import functional as F
 
+
+class CN(_BatchNorm):
+    """official implementation"""
+    def __init__(self, num_features, G=8, eps = 1e-5, momentum = 0.1, affine=True):
+        super(CN, self).__init__(num_features, eps, momentum, affine=affine)
+        self.G = G
+
+    def forward(self, input):
+        out_gn = F.group_norm(input, self.G, None, None, self.eps)
+        out = F.batch_norm(out_gn, self.running_mean, self.running_var, self.weight, self.bias,
+                self.training, self.momentum, self.eps)
+        return out
+
+# TODO debug
 class ContinualNorm(nn.Module):
     def __init__(self, num_groups, num_features, eps=1e-5, momentum=0.1) -> None:
         super().__init__()
@@ -67,7 +83,8 @@ class ContinualNormAE(BaseVisModel):
             modules.append(
                 nn.Sequential(
                 nn.Linear(self.encoder_dims[i], self.encoder_dims[i+1]),
-                ContinualNorm(8, self.encoder_dims[i+1]),
+                # ContinualNorm(8, self.encoder_dims[i+1]),
+                CN(self.encoder_dims[i+1]),
                 nn.ReLU(True) 
                 )
             )
@@ -80,7 +97,8 @@ class ContinualNormAE(BaseVisModel):
             modules.append(
                 nn.Sequential(
                     nn.Linear(self.decoder_dims[i], self.decoder_dims[i+1]),
-                    ContinualNorm(8, self.decoder_dims[i+1]),
+                    # ContinualNorm(8, self.decoder_dims[i+1]),
+                    CN(self.decoder_dims[i+1]),
                     nn.ReLU(True)
                 )
             )

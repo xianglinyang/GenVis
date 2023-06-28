@@ -32,7 +32,7 @@ class GroupNormAE(BaseVisModel):
             modules.append(
                 nn.Sequential(
                     nn.Linear(self.decoder_dims[i], self.decoder_dims[i+1]),
-                    nn.GroupNorm(8, self.decoder_dims[i+1])
+                    nn.GroupNorm(8, self.decoder_dims[i+1]),
                     nn.ReLU(True)
                 )
                 

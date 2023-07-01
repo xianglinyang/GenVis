@@ -15,7 +15,7 @@ from umap.umap_ import find_ab_params
 
 from singleVis.custom_weighted_random_sampler import CustomWeightedRandomSampler
 # from singleVis.SingleVisualizationModel import VisModel
-from singleVis.vis_models import BN_AE
+from singleVis.vis_models import ContinualNormAE
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss, LocalTemporalLoss, SmoothnessLoss
 from singleVis.edge_dataset import DVIDataHandler, LocalTemporalDataHandler
 from singleVis.trainer import DVITrainer, SingleVisTrainer, LocalTemporalTrainer
@@ -86,7 +86,7 @@ net = eval("subject_model.{}()".format(NET))
 # Define data_provider
 data_provider = NormalDataProvider(CONTENT_PATH, net, EPOCH_START, EPOCH_END, EPOCH_PERIOD, device=DEVICE, classes=CLASSES, epoch_name=EPOCH_NAME, verbose=1)
 # Define visualization models
-model = BN_AE(ENCODER_DIMS, DECODER_DIMS)
+model = ContinualNormAE(ENCODER_DIMS, DECODER_DIMS)
 
 # Define Projector
 projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, epoch_name=EPOCH_NAME, device=DEVICE)

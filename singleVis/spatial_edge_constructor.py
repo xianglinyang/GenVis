@@ -1118,9 +1118,8 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         # construct working history
         working_epochs = list()
         i = 0
-        prev = curr
         while True:
-            prev = prev - pow(2, i) * self.data_provider.p
+            prev = curr - pow(2, i) * self.data_provider.p
             i = i+1
             if prev >= self.data_provider.s:
                 working_epochs.append(prev)

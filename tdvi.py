@@ -98,6 +98,13 @@ if PREPROCESS:
 
 # Define visualization models
 model = vmodels[VIS_MODEL](ENCODER_DIMS, DECODER_DIMS)
+# Calculate the size of trainable weights
+total_bytes = 0
+for name, param in model.named_parameters():
+    if param.requires_grad:
+        num_bytes = param.element_size() * param.nelement()
+        total_bytes += num_bytes
+print(f"Total Trainable Parameters Size: {total_bytes / (1024 * 1024):.2f} MB")
 
 # Define Losses
 negative_sample_rate = 5
@@ -175,7 +182,7 @@ for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_P
     optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
     # Define Edge dataset
-    spatial_cons = LocalSpatialTemporalEdgeConstructor(data_provider, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean")
+    spatial_cons = LocalSpatialTemporalEdgeConstructor(data_provider, projector, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean")
     t0 = time.time()
     edge_to, edge_from, probs, feature_vectors, attention, coefficient, embedded = spatial_cons.construct(iteration-EPOCH_PERIOD, iteration, prev_embedding)
     t1 = time.time()
@@ -194,7 +201,7 @@ for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_P
     #                                                       TRAIN                                                          #
     ########################################################################################################################
 
-    trainer = LocalTemporalTrainer(model, criterion, optimizer, lr_scheduler,edge_loader=edge_loader, DEVICE=DEVICE)
+    trainer = LocalTemporalTrainer(model, criterion, optimizer, lr_scheduler, edge_loader=edge_loader, DEVICE=DEVICE)
 
     train_epoch, time_spent = trainer.train(PATIENT, MAX_EPOCH)
 

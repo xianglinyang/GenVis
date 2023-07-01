@@ -6,9 +6,9 @@ import time
 import math
 import json
 import scipy
-import numba
+# import numba
 
-from umap.umap_ import fuzzy_simplicial_set, make_epochs_per_sample
+from umap.umap_ import fuzzy_simplicial_set, make_epochs_per_sample, smooth_knn_dist, compute_membership_strengths
 from pynndescent import NNDescent
 from sklearn.neighbors import NearestNeighbors
 from sklearn.utils import check_random_state
@@ -127,7 +127,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         )
         return complex, sigmas, rhos, knn_indices
     
-    def _construct_boundary_wise_complex(self, train_data, border_centers):
+    def _construct_boundary_wise_complex(self, train_data, border_centers, train_sigmas=None, train_rhos=None):
         """compute the boundary wise complex
             for each border point, we calculate its k nearest train points
             for each train data, we calculate its k nearest border points
@@ -138,15 +138,44 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         knn_dists, knn_indices = high_neigh.kneighbors(fitting_data, n_neighbors=self.n_neighbors, return_distance=True)
         knn_indices = knn_indices + len(train_data)
 
-        random_state = check_random_state(None)
-        bw_complex, sigmas, rhos = fuzzy_simplicial_set(
-            X=fitting_data,
-            n_neighbors=self.n_neighbors,
-            metric=self.metric,
-            random_state=random_state,
-            knn_indices=knn_indices,
-            knn_dists=knn_dists,
+        # random_state = check_random_state(None)
+        # bw_complex, sigmas, rhos = fuzzy_simplicial_set(
+        #     X=fitting_data,
+        #     n_neighbors=self.n_neighbors,
+        #     metric=self.metric,
+        #     random_state=random_state,
+        #     knn_indices=knn_indices,
+        #     knn_dists=knn_dists,
+        # )
+        knn_dists = knn_dists.astype(np.float32)
+
+        sigmas, rhos = smooth_knn_dist(
+            knn_dists,
+            float(self.n_neighbors),
+            local_connectivity=1.0,
         )
+        if train_sigmas is not None:
+            sigmas[:len(train_data)] = train_sigmas
+        if train_rhos is not None:
+            rhos[:len(train_data)] = train_rhos
+
+        rows, cols, vals, _ = compute_membership_strengths(
+            knn_indices, knn_dists, sigmas, rhos
+        )
+        bw_complex = scipy.sparse.coo_matrix(
+            (vals, (rows, cols)), shape=(fitting_data.shape[0], fitting_data.shape[0])
+        )
+        bw_complex.eliminate_zeros()
+        transpose = bw_complex.transpose()
+        prod_matrix = bw_complex.multiply(transpose)
+        set_op_mix_ratio = 1.0
+        bw_complex = (
+            set_op_mix_ratio * (bw_complex + transpose - prod_matrix)
+            + (1.0 - set_op_mix_ratio) * prod_matrix
+        )
+
+        bw_complex.eliminate_zeros()
+
         return bw_complex, sigmas, rhos, knn_indices
     
     def _construct_local_temporal_complex(self, prev_data, next_data, b_num=0):
@@ -628,13 +657,15 @@ class SingleEpochSpatialEdgeConstructor(SpatialEdgeConstructor):
     def construct(self,):
         # load train data and border centers
         train_data = self.data_provider.train_representation(self.iteration)
+        # border_centers = self.data_provider.border_representation(self.iteration).squeeze()
+        # train_data = np.concatenate((train_data, border_centers), axis=0)
         # selected = np.random.choice(len(train_data), int(0.5*len(train_data)), replace=False)
         # train_data = train_data[selected]
 
         if self.b_n_epochs > 0:
             border_centers = self.data_provider.border_representation(self.iteration).squeeze()
-            complex, _, _, _ = self._construct_fuzzy_complex(train_data)
-            bw_complex, _, _, _ = self._construct_boundary_wise_complex(train_data, border_centers)
+            complex, sigmas, rhos, _ = self._construct_fuzzy_complex(train_data)
+            bw_complex, _, _, _ = self._construct_boundary_wise_complex(train_data, border_centers, sigmas, rhos)
             edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, bw_complex)
             feature_vectors = np.concatenate((train_data, border_centers), axis=0)
             # pred_model = self.data_provider.prediction_function(self.iteration)
@@ -1078,41 +1109,49 @@ class tfEdgeConstructor(SpatialEdgeConstructor):
         return edges_to_exp, edges_from_exp, weights_exp, feature_vectors, attention, n_rate
 
 class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, s_n_epochs, b_n_epochs, t_n_epochs, n_neighbors, metric) -> None:
+    def __init__(self, data_provider, projector, s_n_epochs, b_n_epochs, t_n_epochs, n_neighbors, metric) -> None:
         super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors, metric)
         self.t_n_epochs = t_n_epochs
+        self.projector = projector
     
-    # def _construct_working_memory(self, s, e, p, curr, memory_data, memory_embedded):
-    #     working_epochs = list()
-    #     i = 0
-    #     prev = curr
-    #     while True:
-    #         prev = prev - pow(2, i)*p
-    #         i = i+1
-    #         if prev >=s:
-    #             working_epochs.append(prev)
-    #         else:
-    #             break
-    #     read_memory_data = None
-    #     read_memory_embedded = None
-    #     for i in working_epochs:
-    #         # load train data and border centers
-    #         prev_data = self.data_provider.train_representation(i)
-    #         prev_embedded = self.
-    #         # prev_embedded = prev_embedding
-    #         selected = np.random.choice(len(prev_data), int(0.05*len(prev_data)), replace=False)
-    #         prev_data = prev_data[selected]
-    #         prev_embedded = prev_embedding[selected]
+    def _construct_working_memory(self, curr):
+        # construct working history
+        working_epochs = list()
+        i = 0
+        prev = curr
+        while True:
+            prev = prev - pow(2, i) * self.data_provider.p
+            i = i+1
+            if prev >= self.data_provider.s:
+                working_epochs.append(prev)
+            else:
+                break
+        # working momery
+        read_memory_data = None
+        read_memory_embedded = None
+        for i in working_epochs:
+            # load train data and border centers
+            prev_data = self.data_provider.train_representation(i)
+            selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
+            prev_data = prev_data[selected]
+            prev_embedded = self.projector.batch_project(i, prev_data)
+            if read_memory_data is None:
+                read_memory_data = np.copy(prev_data)
+                read_memory_embedded = np.copy(prev_embedded)
+            else:
+                read_memory_data = np.concatenate((read_memory_data, prev_data), axis=0)
+                read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
+        return read_memory_data, read_memory_embedded
         
     def construct(self, prev_iter, next_iter, prev_embedding):
         # construct working memory
 
         # load train data and border centers
-        prev_data = self.data_provider.train_representation(prev_iter)
-        # prev_embedded = prev_embedding
-        selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
-        prev_data = prev_data[selected]
-        prev_embedded = prev_embedding[selected]
+        # prev_data = self.data_provider.train_representation(prev_iter)
+        # selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
+        # prev_data = prev_data[selected]
+        # prev_embedded = prev_embedding[selected]
+        prev_data, prev_embedded = self._construct_working_memory(next_iter)
 
         next_data = self.data_provider.train_representation(next_iter)
 
@@ -1120,7 +1159,7 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         if self.b_n_epochs > 0:
             border_centers = self.data_provider.border_representation(next_iter).squeeze()
             complex, sigmas, rhos, _ = self._construct_fuzzy_complex(next_data)
-            bw_complex, _, _, _ = self._construct_boundary_wise_complex(next_data, border_centers)
+            bw_complex, _, _, _ = self._construct_boundary_wise_complex(next_data, border_centers, sigmas, rhos)
             t_complex = self._construct_local_temporal_complex(prev_data, next_data, b_num=len(border_centers))
             edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, bw_complex, t_complex)
             feature_vectors = np.concatenate((next_data, border_centers, prev_data), axis=0)
@@ -1129,7 +1168,7 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             attention = np.zeros(feature_vectors.shape)
         elif self.b_n_epochs == 0:
             complex, _, _, _ = self._construct_fuzzy_complex(next_data)
-            t_complex = self._construct_local_temporal_complex(prev_data, next_data)
+            t_complex = self._construct_local_temporal_complex(prev_data, next_data, b_num=0)
             edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, None, t_complex)
             feature_vectors = np.concatenate((next_data, prev_data), axis=0)
             # pred_model = self.data_provider.prediction_function(self.iteration)

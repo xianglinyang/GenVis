@@ -210,9 +210,9 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         )
 
         result.eliminate_zeros()
-        # return result, sigmas, rhos
 
         return result
+
     
     def _construct_step_edge_dataset(self, vr_complex, bw_complex, t_complex=None):
         """
@@ -226,21 +226,35 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         """
         # TODO weight alignment
         # get data from graph
-        _, head, tail, weight, _ = get_graph_elements(vr_complex, self.s_n_epochs)
+
+        if vr_complex is None:
+            head = None
+            tail = None
+            weight = None
+        else:
+            _, head, tail, weight, _ = get_graph_elements(vr_complex, self.s_n_epochs)
         
         # get data from graph
-        if self.b_n_epochs > 0:
-            _, bw_head, bw_tail, bw_weight, _ = get_graph_elements(bw_complex, self.b_n_epochs)
-            head = np.concatenate((head, bw_head), axis=0)
-            tail = np.concatenate((tail, bw_tail), axis=0)
-            weight = np.concatenate((weight, bw_weight), axis=0)
+        if bw_complex is not None and self.b_n_epochs > 0:
+            if head is None:
+                _, head, tail, weight, _ = get_graph_elements(bw_complex, self.b_n_epochs)
+            else:
+                _, bw_head, bw_tail, bw_weight, _ = get_graph_elements(bw_complex, self.b_n_epochs)
+                head = np.concatenate((head, bw_head), axis=0)
+                tail = np.concatenate((tail, bw_tail), axis=0)
+                weight = np.concatenate((weight, bw_weight), axis=0)
         
         if t_complex is not None:
-            _, t_head, t_tail, t_weight, _ = get_graph_elements(t_complex, self.t_n_epochs)
-            head = np.concatenate((head, t_head), axis=0)
-            tail = np.concatenate((tail, t_tail), axis=0)
-            weight = np.concatenate((weight, t_weight), axis=0)
-
+            if head is None:
+                _, head, tail, weight, _ = get_graph_elements(t_complex, self.t_n_epochs)
+            else:
+                _, t_head, t_tail, t_weight, _ = get_graph_elements(t_complex, self.t_n_epochs)
+                head = np.concatenate((head, t_head), axis=0)
+                tail = np.concatenate((tail, t_tail), axis=0)
+                weight = np.concatenate((weight, t_weight), axis=0)
+        
+        if head is None:
+            print("Not edge avaiable!")
         return head, tail, weight
     
 
@@ -654,13 +668,13 @@ class SingleEpochSpatialEdgeConstructor(SpatialEdgeConstructor):
         self.iteration = iteration
         self.metric = metric
     
-    def construct(self,):
+    def construct(self):
         # load train data and border centers
         train_data = self.data_provider.train_representation(self.iteration)
-        # border_centers = self.data_provider.border_representation(self.iteration).squeeze()
-        # train_data = np.concatenate((train_data, border_centers), axis=0)
-        # selected = np.random.choice(len(train_data), int(0.5*len(train_data)), replace=False)
-        # train_data = train_data[selected]
+        border_centers = self.data_provider.border_representation(self.iteration).squeeze()
+        train_data = np.concatenate((train_data, border_centers), axis=0)
+        selected = np.random.choice(len(train_data), int(0.3*len(train_data)), replace=False)
+        train_data = train_data[selected]
 
         if self.b_n_epochs > 0:
             border_centers = self.data_provider.border_representation(self.iteration).squeeze()
@@ -1125,6 +1139,7 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 working_epochs.append(prev)
             else:
                 break
+        # print(working_epochs)
         # working momery
         read_memory_data = None
         read_memory_embedded = None
@@ -1182,6 +1197,86 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         embedded[-len(prev_embedded):] = prev_embedded
             
         return edge_to, edge_from, weight, feature_vectors, attention, coefficient, embedded
+    
+    def record_time(self, save_dir, file_name, operation, t):
+        file_path = os.path.join(save_dir, file_name+".json")
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
+                ti = json.load(f)
+        else:
+            ti = dict()
+        if operation not in ti.keys():
+            ti[operation] = dict()
+        ti[operation][str(self.iteration)] = t
+        with open(file_path, "w") as f:
+            json.dump(ti, f)
+
+
+class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
+    '''split temporal and spatial edges, then train them separately'''
+    def __init__(self, data_provider, projector, s_n_epochs, b_n_epochs, t_n_epochs, n_neighbors, metric) -> None:
+        super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors, metric)
+        self.t_n_epochs = t_n_epochs
+        self.projector = projector
+    
+    def _construct_working_memory(self, curr):
+        # construct working history
+        working_epochs = list()
+        i = 0
+        while True:
+            prev = curr - pow(2, i) * self.data_provider.p
+            i = i+1
+            if prev >= self.data_provider.s:
+                working_epochs.append(prev)
+            else:
+                break
+        # working momery
+        read_memory_data = None
+        read_memory_embedded = None
+        for i in working_epochs:
+            # load train data and border centers
+            prev_data = self.data_provider.train_representation(i)
+            # TODO how much prev data used
+            selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
+            prev_data = prev_data[selected]
+            prev_embedded = self.projector.batch_project(i, prev_data)
+            if read_memory_data is None:
+                read_memory_data = np.copy(prev_data)
+                read_memory_embedded = np.copy(prev_embedded)
+            else:
+                read_memory_data = np.concatenate((read_memory_data, prev_data), axis=0)
+                read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
+        return read_memory_data, read_memory_embedded
+        
+    def construct(self, next_iter):
+        # construct working memory
+        prev_data, prev_embedded = self._construct_working_memory(next_iter)
+        next_data = self.data_provider.train_representation(next_iter)
+        # temporal edges
+        t_complex = self._construct_local_temporal_complex(prev_data, next_data, b_num=0)
+        edge_t_to, edge_t_from, weight_t = self._construct_step_edge_dataset(None, None, t_complex)
+
+        if self.b_n_epochs > 0:
+            border_centers = self.data_provider.border_representation(next_iter).squeeze()
+            complex, sigmas, rhos, _ = self._construct_fuzzy_complex(next_data)
+            bw_complex, _, _, _ = self._construct_boundary_wise_complex(next_data, border_centers, sigmas, rhos)
+            edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, bw_complex, None)
+            feature_vectors = np.concatenate((next_data, border_centers), axis=0)
+            # pred_model = self.data_provider.prediction_function(self.iteration)
+            # attention = get_attention(pred_model, feature_vectors, temperature=.01, device=self.data_provider.DEVICE, verbose=1)
+            attention = np.zeros(feature_vectors.shape)
+        elif self.b_n_epochs == 0:
+            complex, _, _, _ = self._construct_fuzzy_complex(next_data)
+            edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, None, None)
+            feature_vectors = np.copy(next_data)
+            # pred_model = self.data_provider.prediction_function(self.iteration)
+            # attention = get_attention(pred_model, feature_vectors, temperature=.01, device=self.data_provider.DEVICE, verbose=1)            
+            attention = np.zeros(feature_vectors.shape)
+        else: 
+            raise Exception("Illegal border edges proposion!")
+        
+        # spatial component, temporal component
+        return (edge_to, edge_from, weight, feature_vectors, attention), (edge_t_to, edge_t_from, weight_t, next_data, prev_data, prev_embedded)
     
     def record_time(self, save_dir, file_name, operation, t):
         file_path = os.path.join(save_dir, file_name+".json")

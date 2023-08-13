@@ -122,8 +122,15 @@ class SingleVisTrainer(TrainerAbstractClass):
             edge_from = edge_from.to(device=self.DEVICE, dtype=torch.float32)
             a_to = a_to.to(device=self.DEVICE, dtype=torch.float32)
             a_from = a_from.to(device=self.DEVICE, dtype=torch.float32)
+            
+            embedding_to, recon_to = self.model(edge_to)
+            embedding_from, recon_from = self.model(edge_from)
+            
+            outputs = dict()
+            outputs["umap"] = (embedding_to, embedding_from)
+            outputs["recon"] = (recon_to, recon_from)
 
-            outputs = self.model(edge_to, edge_from)
+            # outputs = self.model(edge_to, edge_from)
             umap_l, recon_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, outputs)
             all_loss.append(loss.item())
             umap_losses.append(umap_l.item())
@@ -368,6 +375,86 @@ class LocalTemporalTrainer(SingleVisTrainer):
         self.model.eval()
         if verbose:
             message = f"umap:{self._loss['umap'][-1]:.4f}\trecon:{self._loss['recon'][-1]:.4f}\tsmooth:{self._loss['smooth'][-1]:.4f}\tloss:{self._loss['loss'][-1]:.4f}\t"
+            print(message)
+        return self.loss
+    
+    def record_time(self, save_dir, file_name, operation, iteration, t):
+        # save result
+        save_file = os.path.join(save_dir, file_name+".json")
+        if not os.path.exists(save_file):
+            evaluation = dict()
+        else:
+            f = open(save_file, "r")
+            evaluation = json.load(f)
+            f.close()
+        if operation not in evaluation.keys():
+            evaluation[operation] = dict()
+        evaluation[operation][iteration] = t
+        with open(save_file, 'w') as f:
+            json.dump(evaluation, f)
+
+
+class SplitTemporalTrainer(SingleVisTrainer):
+    def __init__(self, model, criterion, optimizer, lr_scheduler, spatial_edge_loader, temporal_edge_loader, DEVICE):
+        super().__init__(model, criterion, optimizer, lr_scheduler, spatial_edge_loader, DEVICE)
+        self.temporal_edge_loader = temporal_edge_loader
+        self._loss['temporal']=list()
+
+    def update_edge_loader(self, spatial_edge_loader, temporal_edge_loader):
+        del self.spatial_edge_loader
+        del self.temporal_edge_loader
+        gc.collect()
+        self.spatial_edge_loader = spatial_edge_loader
+        self.temporal_edge_loader = temporal_edge_loader
+        
+    def train_step(self, verbose=1):
+        self.model.to(device=self.DEVICE)
+        self.model.train()
+        all_loss = []
+        umap_losses = []
+        recon_losses = []
+        temporal_losses = []
+
+        t = tqdm(zip(self.edge_loader, self.temporal_edge_loader), leave=True)
+        for spatial_data, temporal_data in t:
+            edge_to, edge_from, a_to, a_from = spatial_data
+            edge_t_to, edge_t_from, embedded_from = temporal_data
+
+            edge_to = edge_to.to(device=self.DEVICE, dtype=torch.float32)
+            edge_from = edge_from.to(device=self.DEVICE, dtype=torch.float32)
+            a_to = a_to.to(device=self.DEVICE, dtype=torch.float32)
+            a_from = a_from.to(device=self.DEVICE, dtype=torch.float32)
+            
+            edge_t_to = edge_t_to.to(device=self.DEVICE, dtype=torch.float32)
+            edge_t_from = edge_t_from.to(device=self.DEVICE, dtype=torch.float32)
+            embedded_from = embedded_from.to(device=self.DEVICE, dtype=torch.float32)
+            
+            embedding_to, recon_to = self.model(edge_to)
+            embedding_from, recon_from = self.model(edge_from)
+            embedding_t_to, _ = self.model(edge_t_to)
+            
+            outputs = dict()
+            outputs["umap"] = (embedding_to, embedding_from)
+            outputs["recon"] = (recon_to, recon_from)
+            outputs['temporal'] = embedding_t_to
+            
+            umap_l, recon_l, temporal_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, embedded_from, outputs)
+            all_loss.append(loss.item())
+            umap_losses.append(umap_l.item())
+            recon_losses.append(recon_l.item())
+            temporal_losses.append(temporal_l.item())
+            # ===================backward====================
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+        # record loss history
+        self._loss['loss'].append(sum(all_loss) / len(all_loss))
+        self._loss['umap'].append(sum(umap_losses) / len(umap_losses))
+        self._loss['recon'].append(sum(recon_losses) / len(recon_losses))
+        self._loss['temporal'].append(sum(temporal_losses) / len(temporal_losses))
+        self.model.eval()
+        if verbose:
+            message = (f"umap:{self._loss['umap'][-1]:.4f}\trecon:{self._loss['recon'][-1]:.4f}\ttemporal:{self._loss['temporal'][-1]:.4f}\tloss:{self._loss['loss'][-1]:.4f}")
             print(message)
         return self.loss
     

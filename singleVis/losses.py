@@ -216,6 +216,69 @@ class LocalTemporalLoss(nn.Module):
         # return umap_l_s, umap_l_t, recon_l, loss
         return umap_l, recon_l, smooth_l, loss
 
+class TemporalEdgeLoss(nn.Module):
+    def __init__(self, negative_sample_rate, _a=1.0, _b=1.0, repulsion_strength=1.0):
+        super(TemporalEdgeLoss, self).__init__()
+        self._negative_sample_rate = negative_sample_rate
+        self.a = _a
+        self.b = _b
+        self._repulsion_strength = repulsion_strength
+
+    def forward(self, embedding_to, embedding_from):
+        # embedding_from does not have gradient
+        assert embedding_from.requires_grad == False
+        batch_size = embedding_to.shape[0]
+        if batch_size == 0:
+            return torch.tensor(0).to(dtype=torch.float32)
+        # get negative samples
+        embedding_neg_to = torch.repeat_interleave(embedding_to, self._negative_sample_rate, dim=0)
+        repeat_neg = torch.repeat_interleave(embedding_from, self._negative_sample_rate, dim=0)
+        randperm = torch.randperm(batch_size*self._negative_sample_rate)
+        embedding_neg_from = repeat_neg[randperm]
+
+        distance_embedding = torch.cat(
+            (
+                torch.norm(embedding_to - embedding_from, dim=1),
+                torch.norm(embedding_neg_to - embedding_neg_from, dim=1),
+            ),
+            dim=0,
+        )
+        probabilities_distance = convert_distance_to_probability(
+            distance_embedding, self.a, self.b
+        )
+
+        # set true probabilities based on negative sampling
+        probabilities_graph = torch.zeros_like(probabilities_distance)
+        probabilities_graph[:batch_size] = 1
+
+        # compute cross entropy
+        (_, _, ce_loss) = compute_cross_entropy(
+            probabilities_graph,
+            probabilities_distance,
+            repulsion_strength=self._repulsion_strength,
+        )
+
+        return torch.mean(ce_loss )
+
+class splittDVILoss(nn.Module):
+    def __init__(self, umap_loss, recon_loss, temporal_edge_loss):
+        super(splittDVILoss, self).__init__()
+        self.umap_loss = umap_loss
+        self.recon_loss = recon_loss
+        self.temporal_loss = temporal_edge_loss
+
+    def forward(self, edge_to, edge_from, a_to, a_from, embedded_from,outputs):
+        embedding_to, embedding_from = outputs["umap"]
+        recon_to, recon_from = outputs["recon"]
+        embedded_to = outputs["temporal"]
+        
+        recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from, a_to, a_from)
+        umap_l = self.umap_loss(embedding_to, embedding_from) 
+        temporal_l = self.temporal_loss(embedded_to, embedded_from)
+
+        loss = umap_l + recon_l+ temporal_l
+        return umap_l, recon_l, temporal_l, loss
+
 
 import tensorflow as tf
 def umap_loss(

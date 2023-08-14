@@ -14,8 +14,7 @@ from torch.utils.data import WeightedRandomSampler
 from umap.umap_ import find_ab_params
 
 from singleVis.custom_weighted_random_sampler import CustomWeightedRandomSampler
-# from singleVis.SingleVisualizationModel import VisModel
-from singleVis.vis_models import BN_AE
+from singleVis.vis_models import vis_models as vmodels
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss
 from singleVis.edge_dataset import DataHandler
 from singleVis.trainer import SingleVisTrainer
@@ -23,8 +22,7 @@ from singleVis.data import NormalDataProvider
 from singleVis.spatial_edge_constructor import SingleEpochSpatialEdgeConstructor
 from singleVis.projector import DVIProjector
 from singleVis.eval.evaluator import Evaluator
-from singleVis.utils import knn
-from singleVis.kcenter_greedy import kCenterGreedy
+
 ########################################################################################################################
 #                                                     DVI PARAMETERS                                                   #
 ########################################################################################################################
@@ -37,12 +35,15 @@ VIS_METHOD = "singleDVI" # DeepVisualInsight
 parser = argparse.ArgumentParser(description='Process hyperparameters...')
 parser.add_argument('--content_path', type=str)
 parser.add_argument('--iteration','-i', type=int)
-parser.add_argument('-g', type=int)
+parser.add_argument('-g', type=int, default=0)
+parser.add_argument('-r', help='ratio', type=float)
 args = parser.parse_args()
 
 CONTENT_PATH = args.content_path
 I = args.iteration
 GPU_ID = args.g
+RATIO = args.r
+
 sys.path.append(CONTENT_PATH)
 with open(os.path.join(CONTENT_PATH, "config.json"), "r") as f:
     config = json.load(f)
@@ -56,7 +57,6 @@ SETTING = config["SETTING"]
 CLASSES = config["CLASSES"]
 DATASET = config["DATASET"]
 PREPROCESS = config["VISUALIZATION"]["PREPROCESS"]
-# GPU_ID = config["GPU"]
 
 # Training parameter (subject model)
 TRAINING_PARAMETER = config["TRAINING"]
@@ -69,7 +69,8 @@ EPOCH_NAME = config["EPOCH_NAME"]
 
 # Training parameter (visualization model)
 VISUALIZATION_PARAMETER = config["VISUALIZATION"]
-LAMBDA1 = VISUALIZATION_PARAMETER["LAMBDA1"]
+VIS_MODEL = VISUALIZATION_PARAMETER["VIS_MODEL"]
+LAMBDA = VISUALIZATION_PARAMETER["LAMBDA"]
 B_N_EPOCHS = VISUALIZATION_PARAMETER["BOUNDARY"]["B_N_EPOCHS"]
 L_BOUND = VISUALIZATION_PARAMETER["BOUNDARY"]["L_BOUND"]
 ENCODER_DIMS = VISUALIZATION_PARAMETER["ENCODER_DIMS"]
@@ -81,6 +82,8 @@ MAX_EPOCH = VISUALIZATION_PARAMETER["MAX_EPOCH"]
 
 VIS_MODEL_NAME = VISUALIZATION_PARAMETER["VIS_MODEL_NAME"]
 EVALUATION_NAME = VISUALIZATION_PARAMETER["EVALUATION_NAME"]
+VIS_MODEL_NAME = f"{VIS_MODEL_NAME}_{RATIO}"
+EVALUATION_NAME = f"{EVALUATION_NAME}_{RATIO}"
 
 # Define hyperparameters
 DEVICE = torch.device("cuda:{}".format(GPU_ID) if torch.cuda.is_available() else "cpu")
@@ -99,21 +102,19 @@ if PREPROCESS:
         data_provider._estimate_boundary(LEN//10, l_bound=L_BOUND)
 
 # Define visualization models
-model = BN_AE(ENCODER_DIMS, DECODER_DIMS)
-# model= VisModel(ENCODER_DIMS, DECODER_DIMS)
+model = vmodels[VIS_MODEL](ENCODER_DIMS, DECODER_DIMS)
 
 # Define Losses
 negative_sample_rate = 5
 min_dist = .1
 _a, _b = find_ab_params(1.0, min_dist)
-umap_loss_fn = UmapLoss(negative_sample_rate, DEVICE, _a, _b, repulsion_strength=1.0)
+umap_loss_fn = UmapLoss(negative_sample_rate, _a, _b, repulsion_strength=1.0)
 recon_loss_fn = ReconstructionLoss(beta=1.0)
 # Define Projector
 projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, epoch_name=EPOCH_NAME, device=DEVICE)
 
-
 # Define DVI Loss
-criterion = SingleVisLoss(umap_loss_fn, recon_loss_fn, lambd=LAMBDA1)
+criterion = SingleVisLoss(umap_loss_fn, recon_loss_fn, lambd=LAMBDA)
 
 # Define training parameters
 optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
@@ -123,28 +124,40 @@ t0 = time.time()
 spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, I, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean")
 
 # random sampling
-# train_data = data_provider.train_representation(I)
-# ratio = 1
-# ratio=0.15
-# selected = np.random.choice(len(train_data), int(ratio*len(train_data)), replace=False)
+train_data = data_provider.train_representation(I)
+selected = np.random.choice(len(train_data), int(RATIO*len(train_data)), replace=False)
+train_data = train_data[selected]
 # # import json
 # # with open("/home/xianglin/projects/git_space/DLVisDebugger/experiments/idxs.json", "r") as f:
 # #     selected = json.load(f)
 # train_data = train_data[selected]
-# # kc = kCenterGreedy(train_data)
-# # selected_idxs = np.random.choice(len(train_data), 200, replace=False)
-# # kc.select_batch_with_budgets(selected_idxs, budgets=int(ratio*len(train_data))-200)
-# # selected_idxs = kc.already_selected.astype("int")
-# # train_data = train_data[selected_idxs]
 
-edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
+# kc = kCenterGreedy(train_data)
+# selected_idxs = np.random.choice(len(train_data), 200, replace=False)
+# kc.select_batch_with_budgets(selected_idxs, budgets=int(ratio*len(train_data))-200)
+# selected_idxs = kc.already_selected.astype("int")
+# train_data = train_data[selected_idxs]
+
+# farthest point sampling
+# from dgl.geometry import farthest_point_sampler
+# data = torch.from_numpy(train_data[np.newaxis,:,:]).to(device=torch.device("cuda:1"))
+# point_idxs = farthest_point_sampler(data, int(ratio*len(train_data)))
+# point_idxs = point_idxs.cpu().numpy().squeeze(0)
+# train_data = train_data[point_idxs]
+
+# decision set, sampling samples with lower confidence
+# preds = data_provider.get_pred(I, train_data)
+# from scipy.special import softmax
+# probs = 1 - softmax(preds, axis=1).max(axis=1)
+# probs_ = probs/probs.sum()
+# selected_1 = np.random.choice(len(train_data), int(0.9*ratio*len(train_data)), replace=False, p=probs_)
+# train_data_ = train_data[selected_1]
+# probs_ = (1-probs)/(1-probs).sum()
+# selected_2 = np.random.choice(len(train_data), int(0.1*ratio*len(train_data)), replace=False, p=probs_)
+# train_data = np.concatenate((train_data_, train_data[selected_2]))
+
+edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct(train_data)
 t1 = time.time()
-
-# probs = probs / (probs.max()+1e-3)
-# eliminate_zeros = probs>1e-2#1e-3
-# edge_to = edge_to[eliminate_zeros]
-# edge_from = edge_from[eliminate_zeros]
-# probs = probs[eliminate_zeros]
 
 dataset = DataHandler(edge_to, edge_from, feature_vectors, attention)
 
@@ -154,7 +167,7 @@ if len(edge_to) > pow(2,24):
     sampler = CustomWeightedRandomSampler(probs, n_samples, replacement=True)
 else:
     sampler = WeightedRandomSampler(probs, n_samples, replacement=True)
-edge_loader = DataLoader(dataset, batch_size=2000, sampler=sampler, num_workers=4, prefetch_factor=10, pin_memory=True)
+edge_loader = DataLoader(dataset, batch_size=1000, sampler=sampler, num_workers=4, prefetch_factor=10, pin_memory=True)
 
 #######################################################################################################################
 #                                                       TRAIN                                                         #
@@ -194,12 +207,14 @@ trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
 
 from singleVis.visualizer import visualizer
 
-ratio = 1
 vis = visualizer(data_provider, projector, 200, "tab10")
 save_dir = os.path.join(data_provider.content_path, "img")
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
-vis.savefig(I, path=os.path.join(save_dir, "{}_{}_{}_{}.png".format(DATASET, I, ratio, VIS_METHOD)))
+# vis.savefig(I, path=os.path.join(save_dir, "{}_{}_{}_{}.png".format(VIS_METHOD, VIS_MODEL, I, ratio)))
+pred = data_provider.get_pred(I, train_data).argmax(axis=1)
+labels = data_provider.train_labels(I)[selected]
+vis.savefig_cus(I, train_data, pred, labels, path=os.path.join(save_dir, "{}_{}_{}_{}.png".format(VIS_METHOD, VIS_MODEL, I, RATIO)))
 
 
 ########################################################################################################################

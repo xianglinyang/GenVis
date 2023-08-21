@@ -96,6 +96,7 @@ class DensityAwareSampling(SubSampling):
 
         group_nums = np.array(group_nums)
         group_ratios = softmax((1 - group_nums/num)/temperature)
+        # group_ratios = softmax((group_nums/num)/temperature)
         group_selected_num = (target_num*group_ratios).astype(int)
         print(f"density: {self.density}\nSelected num: {group_selected_num}\nGroup num:{group_nums}\n")
 
@@ -107,7 +108,13 @@ class DensityAwareSampling(SubSampling):
             if selected_num>= len(group):
                 selected_idxs.extend(group.tolist())
             else:
-                selected_group_idxs = np.random.choice(group, selected_num, replace=False)
+                assert selected_num > 100
+                kc = kCenterGreedy(self.data[group], metric=self.metric)
+                random_init_idxs = np.random.choice(len(group), size=100, replace=False)
+                _ = kc.select_batch_with_budgets(random_init_idxs, selected_num-100)
+                selected_group_idxs = group[kc.already_selected]
+                
+                # selected_group_idxs = np.random.choice(group, selected_num, replace=False)
                 selected_idxs.extend(selected_group_idxs.tolist())
             
         # return selected_idxs

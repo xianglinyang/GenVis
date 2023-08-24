@@ -199,7 +199,7 @@ class SingleVisTrainer(TrainerAbstractClass):
         torch.save(save_model, save_path)
         print("Successfully save visualization model...")
     
-    def record_time(self, save_dir, file_name, key, t):
+    def record_time(self, save_dir, file_name, key, epoch, t):
         # save result
         save_file = os.path.join(save_dir, file_name+".json")
         if not os.path.exists(save_file):
@@ -208,7 +208,12 @@ class SingleVisTrainer(TrainerAbstractClass):
             f = open(save_file, "r")
             evaluation = json.load(f)
             f.close()
-        evaluation[key] = t
+        if epoch is None:
+            evaluation[key] = t
+        else:
+            if key not in evaluation.keys():
+                evaluation[key] = dict()
+            evaluation[key][str(epoch)] = t
         with open(save_file, 'w') as f:
             json.dump(evaluation, f)
 

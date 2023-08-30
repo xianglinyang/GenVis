@@ -3,6 +3,8 @@ Help functions to evaluate our visualization system
 """
 
 import numpy as np
+import torch.nn as nn
+import torch.optim as optim
 from pynndescent import NNDescent
 from sklearn.neighbors import NearestNeighbors
 from scipy.stats import spearmanr, pearsonr, rankdata
@@ -137,7 +139,6 @@ def evaluate_embedding_distance(source, target, metric, one_target):
         raise NotImplementedError
 
 
-
 def evaluate_inv_accu(labels, pred):
     """
     prediction accuracy of reconstruction data
@@ -213,6 +214,55 @@ def evaluate_proj_temporal_perseverance_entropy(alpha, delta_x):
             corr[i] = correlation
 
     return corr.mean()
+
+
+def gradient_diff(prev_e, next_e, training_data, targets, data_provider, criterion):
+
+    model_t = data_provider.model_function(prev_e)
+    model_t = model_t.to(data_provider.DEVICE)
+    optimizer_t = optim.SGD(model_t.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
+
+    model_t1 = data_provider.model_function(next_e)
+    model_t1 = model_t1.to(data_provider.DEVICE)
+    optimizer_t1 = optim.SGD(model_t1.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
+
+    num = len(training_data)
+    gradient_diff = np.zeros(num)
+    for i in range(num):
+        x = training_data[i:i+1]
+        target = targets[i:i+1]
+
+        # Forward pass and compute gradients at time t
+        output_t = model_t(x)
+        loss_t = criterion(output_t, target)
+        optimizer_t.zero_grad()
+        loss_t.backward()
+
+        # Save gradients at time t
+        grads_t = [p.grad.clone() for p in model_t.parameters()]
+
+        # Forward pass and compute gradients at time t+1
+        output_t1 = model_t1(x)
+        loss_t1 = criterion(output_t1, target)
+        optimizer_t1.zero_grad()
+        loss_t1.backward()
+
+        # Save gradients at time t+1
+        grads_t1 = [p.grad.clone() for p in model_t1.parameters()]
+
+        # Compute cosine similarity between gradients at t and t+1
+        cos_sim_values = []
+        cos = nn.CosineSimilarity(dim=0)
+        for g_t, g_t1 in zip(grads_t, grads_t1):
+            cos_sim = cos(g_t.flatten(), g_t1.flatten())
+            cos_sim_values.append(cos_sim.item())
+
+        # Average cosine similarity
+        avg_cos_sim = sum(cos_sim_values) / len(cos_sim_values)
+
+        gradient_diff[i] = 1 - avg_cos_sim
+
+    return gradient_diff
 
 
 def evaluate_proj_temporal_global_corr(high_rank, low_rank):

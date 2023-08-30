@@ -4,6 +4,7 @@ import time
 import gc 
 import json
 from tqdm import tqdm
+import itertools
 import torch
 
 """
@@ -159,7 +160,7 @@ class SingleVisTrainer(TrainerAbstractClass):
             loss = self.train_step()['loss'][-1]
             self.lr_scheduler.step()
             # early stop, check whether converge or not
-            if prev_loss - loss < 5E-3:
+            if prev_loss - loss < 1E-2:
                 if patient == 0:
                     break
                 else:
@@ -419,8 +420,11 @@ class SplitTemporalTrainer(SingleVisTrainer):
         umap_losses = []
         recon_losses = []
         temporal_losses = []
-
-        t = tqdm(zip(self.edge_loader, self.temporal_edge_loader), leave=True)
+        # iterate the shorter one until we iterate through longest one 
+        if len(self.edge_loader)>len(self.temporal_edge_loader):
+            t = tqdm(zip(self.edge_loader, itertools.cycle(self.temporal_edge_loader)), total=len(self.edge_loader), leave=True)
+        else:
+            t = tqdm(zip(itertools.cycle(self.edge_loader), self.temporal_edge_loader), total=len(self.temporal_edge_loader), leave=True)
         for spatial_data, temporal_data in t:
             edge_to, edge_from, a_to, a_from = spatial_data
             edge_t_to, edge_t_from, embedded_from = temporal_data

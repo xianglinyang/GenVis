@@ -64,17 +64,18 @@ class VisModel(nn.Module):
         self._init_autoencoder()
     
     def _init_autoencoder(self):
-        self.encoder = nn.Sequential(nn.Flatten())
+        # nn.Flatten()
+        self.encoder = nn.Sequential()
         for i in range(0, len(self.encoder_dims)-2):
             self.encoder.add_module("{}".format(len(self.encoder)), nn.Linear(self.encoder_dims[i], self.encoder_dims[i+1]))
-            self.encoder.add_module(f'{len(self.encoder)}', nn.BatchNorm1d(self.encoder_dims[i+1]))
+            # self.encoder.add_module(f'{len(self.encoder)}', nn.BatchNorm1d(self.encoder_dims[i+1]))
             self.encoder.add_module("{}".format(len(self.encoder)), nn.ReLU(True))
         self.encoder.add_module("{}".format(len(self.encoder)), nn.Linear(self.encoder_dims[-2], self.encoder_dims[-1]))
         
         self.decoder = nn.Sequential()
         for i in range(0, len(self.decoder_dims)-2):
             self.decoder.add_module("{}".format(len(self.decoder)), nn.Linear(self.decoder_dims[i], self.decoder_dims[i+1]))
-            self.decoder.add_module(f'{len(self.decoder)}', nn.BatchNorm1d(self.decoder_dims[i+1]))
+            # self.decoder.add_module(f'{len(self.decoder)}', nn.BatchNorm1d(self.decoder_dims[i+1]))
             self.decoder.add_module("{}".format(len(self.decoder)), nn.ReLU(True))
         self.decoder.add_module("{}".format(len(self.decoder)), nn.Linear(self.decoder_dims[-2], self.decoder_dims[-1]))
 

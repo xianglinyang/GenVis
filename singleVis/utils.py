@@ -182,6 +182,7 @@ def jaccard_similarity(l1, l2):
     i = np.intersect1d(l1,l2)
     return float(len(i)) / len(u)
 
+
 def knn(data, k, metric):
     # number of trees in random projection forest
     n_trees = min(64, 5 + int(round((data.shape[0]) ** 0.5 / 20.0)))
@@ -300,7 +301,7 @@ def find_neighbor_preserving_rate(prev_data, train_data, n_neighbors, metric):
     prev_nnd = NNDescent(
         prev_data,
         n_neighbors=n_neighbors,
-        metric=metric,
+        metric="euclidean",
         n_trees=n_trees,
         n_iters=n_iters,
         max_candidates=60,

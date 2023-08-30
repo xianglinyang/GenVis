@@ -33,9 +33,6 @@ class UmapLoss(nn.Module):
         randperm = torch.randperm(batch_size*self._negative_sample_rate)
         embedding_neg_from = repeat_neg[randperm]
 
-        # distance_embedding = torch.zeros(batch_size*(1+self._negative_sample_rate), device=embedding_to.device)
-        # distance_embedding[:batch_size] = torch.sqrt((embedding_to - embedding_from).pow(2).sum(1))
-        # distance_embedding[batch_size:] = torch.sqrt((embedding_neg_to - embedding_neg_from).pow(2).sum(1))
         #  distances between samples (and negative samples)
         distance_embedding = torch.cat(
             (

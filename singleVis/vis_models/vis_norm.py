@@ -1,11 +1,10 @@
 import torch.nn as nn
 from .base import BaseVisModel
 
-
-class GroupNormAE(BaseVisModel):
+class VisNormAE(BaseVisModel):
 
     def __init__(self, encoder_dims, decoder_dims):
-        super(GroupNormAE, self).__init__()
+        super(VisNormAE, self).__init__()
   
         assert len(encoder_dims) > 1
         assert len(decoder_dims) > 1
@@ -18,8 +17,7 @@ class GroupNormAE(BaseVisModel):
             modules.append(
                 nn.Sequential(
                 nn.Linear(self.encoder_dims[i], self.encoder_dims[i+1]),
-                nn.GroupNorm(8, self.encoder_dims[i+1]),
-                nn.LayerNorm(self.encoder_dims[i+1]),
+                nn.BatchNorm1d(self.encoder_dims[i+1]),
                 nn.ReLU(True) 
                 )
             )
@@ -32,14 +30,13 @@ class GroupNormAE(BaseVisModel):
             modules.append(
                 nn.Sequential(
                     nn.Linear(self.decoder_dims[i], self.decoder_dims[i+1]),
-                    nn.GroupNorm(8, self.decoder_dims[i+1]),
+                    nn.BatchNorm1d(self.decoder_dims[i+1]),
                     nn.ReLU(True)
                 )
-                
             )
         modules.append(nn.Linear(self.decoder_dims[-2], self.decoder_dims[-1]))
         self.decoder = nn.Sequential(*modules)
-
+    
     def forward(self, edge):
         embedding = self.encoder(edge)
         recon = self.decoder(embedding)

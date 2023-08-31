@@ -16,6 +16,17 @@ class BaseVisModel(nn.Module):
     def forward(self, *inputs):
         pass
 
+    # Calculate the size of trainable weights
+    def cal_param_size(self):
+        total_bytes = 0
+        for param in self.parameters():
+            if param.requires_grad:
+                num_bytes = param.element_size() * param.nelement()
+                total_bytes += num_bytes
+        size = total_bytes / (1024 * 1024)
+        print(f"Total Trainable Parameters Size: {size:.2f} MB")
+        return size
+
 
 class AE(BaseVisModel):
 

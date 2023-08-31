@@ -2,10 +2,25 @@
 Edge dataset from temporal complex
 """
 from abc import ABC, abstractmethod
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from PIL import Image
 import tensorflow as tf
 import numpy as np
+
+from singleVis.custom_weighted_random_sampler import CustomWeightedRandomSampler
+
+######################################### helper functions ############################################
+def create_dataloader(dataset, n_epochs, weights, num_edges, batch_size=1000):
+    n_samples = int(np.sum(n_epochs * weights) // 1)
+    # chose sampler based on the number of dataset
+    if num_edges > pow(2,24):
+        sampler = CustomWeightedRandomSampler(weights, n_samples, replacement=True)
+    else:
+        sampler = WeightedRandomSampler(weights, n_samples, replacement=True)
+    edge_loader = DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=4, prefetch_factor=10, pin_memory=True)
+    return edge_loader
+
+#########################################################################################################
 
 class DataHandlerAbstractClass(Dataset, ABC):
     def __init__(self, edge_to, edge_from, feature_vector) -> None:

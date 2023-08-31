@@ -34,13 +34,20 @@ class VisualizerAbstractClass(ABC):
         pass
 
 class visualizer(VisualizerAbstractClass):
-    def __init__(self, data_provider, projector, resolution, cmap='tab10'):
+    def __init__(self, data_provider, projector, resolution, cmap='tab10', folder=None):
         self.data_provider = data_provider
         self.projector = projector
         self.cmap = plt.get_cmap(cmap)
         self.classes = data_provider.classes
         self.class_num = len(self.classes)
         self.resolution= resolution
+
+        # prepare save dir
+        if folder is None:
+            folder = os.path.join(data_provider.content_path, "img")
+        self.folder = folder
+        if not os.path.exists(self.folder):
+            os.mkdir(self.folder)
 
     def _init_plot(self, only_img=False):
         '''
@@ -183,7 +190,7 @@ class visualizer(VisualizerAbstractClass):
         grid_view = grid.reshape(resolution, resolution, 2)
         return grid_view, decision_view
     
-    def savefig(self, epoch, path="vis"):
+    def savefig(self, epoch, filename="vis"):
         '''
         Shows the current plot.
         '''
@@ -224,9 +231,10 @@ class visualizer(VisualizerAbstractClass):
         # self.fig.canvas.flush_events()
 
         # plt.text(-8, 8, "test", fontsize=18, style='oblique', ha='center', va='top', wrap=True)
+        path = os.path.join(self.folder, filename)
         plt.savefig(path)
     
-    def save_default_fig(self, epoch, path="vis"):
+    def save_default_fig(self, epoch, filename="vis"):
         '''
         Shows the current plot.
         '''
@@ -250,9 +258,10 @@ class visualizer(VisualizerAbstractClass):
         for c in range(self.class_num):
             data = embedding[train_labels == c]
             self.sample_plots[c].set_data(data.transpose())
+        path = os.path.join(self.folder, filename)
         plt.savefig(path)
     
-    def savefig_cus(self, epoch, data, pred, labels, path="vis"):
+    def savefig_cus(self, epoch, data, pred, labels, filename="vis"):
         '''
         Shows the current plot with given data
         '''
@@ -285,10 +294,11 @@ class visualizer(VisualizerAbstractClass):
 
         # self.fig.canvas.draw()
         # self.fig.canvas.flush_events()
+        path = os.path.join(self.folder, filename)
         plt.savefig(path)
 
     
-    def savefig_trajectory(self, epoch, xs, ys, xy_limit=None, path="vis"):
+    def savefig_trajectory(self, epoch, xs, ys, xy_limit=None, filename="vis"):
         '''
         Shows the current plot with given data
         '''
@@ -316,6 +326,7 @@ class visualizer(VisualizerAbstractClass):
 
         # plt.quiver(prev_embedding[:, 0], prev_embedding[:, 1], embedding[:, 0]-prev_embedding[:, 0],embedding[:, 1]-prev_embedding[:, 1], scale_units='xy', angles='xy', scale=1, color='black')  
         plt.quiver(x,y,u,v, angles='xy', scale_units='xy', scale=1, color="black")
+        path = os.path.join(self.folder, filename)
         plt.savefig(path)
     
     def get_background(self, epoch, resolution):
@@ -363,8 +374,8 @@ class visualizer(VisualizerAbstractClass):
         return color
 
 class DenseALvisualizer(visualizer):
-    def __init__(self, data_provider, projector, resolution, cmap='tab10'):
-        super().__init__(data_provider, projector, resolution, cmap)
+    def __init__(self, data_provider, projector, resolution, cmap='tab10', folder=None):
+        super().__init__(data_provider, projector, resolution, cmap, folder)
     
     def get_epoch_plot_measures(self, iteration, epoch):
         """get plot measure for visualization"""
@@ -431,7 +442,7 @@ class DenseALvisualizer(visualizer):
         grid_view = grid.reshape(resolution, resolution, 2)
         return grid_view, decision_view
     
-    def savefig(self, iteration, epoch, path="vis"):
+    def savefig(self, iteration, epoch, filename="vis"):
         '''
         Shows the current plot.
         '''
@@ -472,9 +483,10 @@ class DenseALvisualizer(visualizer):
         # self.fig.canvas.flush_events()
 
         # plt.text(-8, 8, "test", fontsize=18, style='oblique', ha='center', va='top', wrap=True)
+        path = os.path.join(self.folder, filename)
         plt.savefig(path)
     
-    def savefig_cus(self, iteration, epoch, data, pred, labels, path="vis"):
+    def savefig_cus(self, iteration, epoch, data, pred, labels, filename="vis"):
         '''
         Shows the current plot with given data
         '''
@@ -499,6 +511,7 @@ class DenseALvisualizer(visualizer):
             data = embedding[np.logical_and(pred == c, labels != pred)]
             self.sample_plots[2*self.class_num + c].set_data(data.transpose())
 
+        path = os.path.join(self.folder, filename)
         plt.savefig(path)
     
     def get_background(self, iteration, epoch, resolution):

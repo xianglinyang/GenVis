@@ -9,42 +9,17 @@ import time
 import numpy as np
 import argparse
 
-from torch.utils.data import DataLoader
-from torch.utils.data import WeightedRandomSampler
 from umap.umap_ import find_ab_params
 
-from singleVis.custom_weighted_random_sampler import CustomWeightedRandomSampler
 from singleVis.vis_models import vis_models as vmodels
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss
-from singleVis.edge_dataset import DataHandler
+from singleVis.edge_dataset import DataHandler, create_dataloader
 from singleVis.trainer import SingleVisTrainer
 from singleVis.data import NormalDataProvider
 from singleVis.spatial_edge_constructor import SingleEpochSpatialEdgeConstructor
 from singleVis.projector import DVIProjector
 from singleVis.eval.evaluator import Evaluator
 from singleVis.subsampling import DensityAwareSampling
-###################################################################################
-# from pynndescent import NNDescent
-# def density_estimation(train_data, k=10, metric="euclidean"):
-#     # number of trees in random projection forest
-#     n_trees = min(64, 5 + int(round((train_data.shape[0]) ** 0.5 / 20.0)))
-#     # max number of nearest neighbor iters to perform
-#     n_iters = max(5, int(round(np.log2(train_data.shape[0]))))
-#     # distance metric
-#     # get nearest neighbors
-#     nnd = NNDescent(
-#         train_data,
-#         n_neighbors=k,
-#         metric=metric,
-#         n_trees=n_trees,
-#         n_iters=n_iters,
-#         max_candidates=60,
-#         verbose=False
-#     )
-#     _, knn_dists = nnd.neighbor_graph
-#     avg_distance = knn_dists[:, -1]
-#     density = k / avg_distance
-#     return avg_distance.mean(), density
 
 ########################################################################################################################
 #                                                     DVI PARAMETERS                                                   #
@@ -152,22 +127,15 @@ spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, I, S_N_EPOCHS, B
 train_data = data_provider.train_representation(I)
 
 # das = DensityAwareSampling(train_data, n_classes=15, k=10, metric="euclidean")
-# selected = das.sampling(ratio=RATIO, temperature=.5)
-selected = np.random.choice(len(train_data), 5993, replace=False)
-train_data = train_data[selected]
+# selected = das.sampling(ratio=RATIO, temperature=1)
+# # selected = np.random.choice(len(train_data), 4620, replace=False)
+# train_data = train_data[selected]
 
 edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct(train_data)
 t1 = time.time()
 
 dataset = DataHandler(edge_to, edge_from, feature_vectors, attention)
-
-n_samples = int(np.sum(S_N_EPOCHS * probs) // 1)
-# chose sampler based on the number of dataset
-if len(edge_to) > pow(2,24):
-    sampler = CustomWeightedRandomSampler(probs, n_samples, replacement=True)
-else:
-    sampler = WeightedRandomSampler(probs, n_samples, replacement=True)
-edge_loader = DataLoader(dataset, batch_size=1000, sampler=sampler, num_workers=4, prefetch_factor=10, pin_memory=True)
+edge_loader = create_dataloader(dataset, S_N_EPOCHS, probs, len(edge_to))
 
 #######################################################################################################################
 #                                                       TRAIN                                                         #
@@ -198,7 +166,7 @@ evaluation["training"][str(I)] = round(t3-t2, 3)
 with open(save_file, 'w') as f:
     json.dump(evaluation, f)
 
-save_dir = os.path.join(data_provider.model_path, "Epoch_{}".format(I))
+save_dir = os.path.join(data_provider.model_path, "{}_{}".format(EPOCH_NAME, I))
 trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
 
 ########################################################################################################################
@@ -211,10 +179,11 @@ vis = visualizer(data_provider, projector, 200, "tab10")
 save_dir = os.path.join(data_provider.content_path, "img")
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
-# vis.savefig(I, path=os.path.join(save_dir, "{}_{}_{}_{}.png".format(VIS_METHOD, VIS_MODEL, I, ratio)))
+# vis.savefig(I, f"{VIS_METHOD}_{VIS_MODEL}_{I}_{RATIO}.png")
 pred = data_provider.get_pred(I, train_data).argmax(axis=1)
-labels = data_provider.train_labels(I)[selected]
-vis.savefig_cus(I, train_data, pred, labels, path=os.path.join(save_dir, "{}_{}_{}_{}.png".format(VIS_METHOD, VIS_MODEL, I, RATIO)))
+# labels = data_provider.train_labels(I)[selected]
+labels = data_provider.train_labels(I)
+vis.savefig_cus(I, train_data, pred, labels, f"{VIS_METHOD}_{VIS_MODEL}_{I}_{RATIO}.png")
 
 
 ########################################################################################################################

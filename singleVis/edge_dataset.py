@@ -156,12 +156,13 @@ class LocalTemporalDataHandler(Dataset):
         return len(self.edge_to)
 
 class SplitTemporalDataHandler(Dataset):
-    def __init__(self, edge_t_to, edge_t_from, next_data, prev_data, prev_embedded, transform=None):
+    def __init__(self, edge_t_to, edge_t_from, next_data, prev_data, prev_embedded, margin, transform=None):
         self.edge_to = edge_t_to
         self.edge_from = edge_t_from
         self.data = np.concatenate((next_data, prev_data), axis=0)
         self.curr_num = len(next_data)
         self.prev_embedded = prev_embedded
+        self.margin = margin
         self.transform = transform
         assert max(self.edge_to.max(), self.edge_from.max()) < (len(self.data))
 
@@ -169,19 +170,22 @@ class SplitTemporalDataHandler(Dataset):
 
         edge_to_idx = self.edge_to[item]
         edge_from_idx = self.edge_from[item]
+        # make sure the prev end point is edge_from
         if edge_from_idx < edge_to_idx:
             edge_from_idx = self.edge_to[item]
             edge_to_idx = self.edge_from[item]
         edge_to = self.data[edge_to_idx]
         edge_from = self.data[edge_from_idx]
         embedded_from = self.prev_embedded[edge_from_idx-self.curr_num]
+        margin = self.margin[edge_from_idx-self.curr_num]
+        
         if self.transform is not None:
             # TODO correct or not?
             edge_to = Image.fromarray(edge_to)
             edge_to = self.transform(edge_to)
             edge_from = Image.fromarray(edge_from)
             edge_from = self.transform(edge_from)
-        return edge_to, edge_from, embedded_from
+        return edge_to, edge_from, embedded_from, margin
 
     def __len__(self):
         # return the number of all edges

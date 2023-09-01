@@ -181,38 +181,6 @@ class DVILoss(nn.Module):
 
         return umap_l, self.lambd1 *recon_l, self.lambd2 *temporal_l, loss
 
-
-class LocalTemporalLoss(nn.Module):
-    def __init__(self, umap_loss, recon_loss, smooth_loss, lambd):
-        super(LocalTemporalLoss, self).__init__()
-        self.umap_loss = umap_loss
-        self.recon_loss = recon_loss
-        self.smooth_loss = smooth_loss
-        self.lambd = lambd
-
-    def forward(self, edge_to, edge_from, a_to, a_from, coef, embedded_from, outputs):
-        embedding_to, embedding_from = outputs["umap"]
-        recon_to, recon_from = outputs["recon"]
-
-        recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from, a_to, a_from)
-        # recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from)
-
-        # split embedding into two pools, grad_required and stop gradient
-        # embedding_to_grad = embedding_to[~coef]
-        # embedding_from_grad = embedding_from[~coef]
-        # embedding_to_no_grad = embedding_to[coef]
-        # embedding_from_no_grad = embedding_from[coef].detach()
-        # umap_l_s = self.umap_loss(embedding_to_grad, embedding_from_grad) 
-        # umap_l_t = self.umap_loss(embedding_to_no_grad, embedding_from_no_grad)
-        umap_l = self.umap_loss(embedding_to, embedding_from) 
-        smooth_l = self.smooth_loss(embedding_from, embedded_from, coef)
-
-        # loss = umap_l_s + 0.1*umap_l_t  + self.lambd * recon_l
-        loss = umap_l + self.lambd * recon_l+ smooth_l
-
-        # return umap_l_s, umap_l_t, recon_l, loss
-        return umap_l, recon_l, smooth_l, loss
-
 class TemporalEdgeLoss(nn.Module):
     def __init__(self, negative_sample_rate, _a=1.0, _b=1.0, repulsion_strength=1.0):
         super(TemporalEdgeLoss, self).__init__()
@@ -221,9 +189,10 @@ class TemporalEdgeLoss(nn.Module):
         self.b = _b
         self._repulsion_strength = repulsion_strength
 
-    def forward(self, embedding_to, embedding_from):
+    def forward(self, embedding_to, embedding_from, embedded_from_reference, margin):
+        # strategy 1
         # embedding_from does not have gradient
-        assert embedding_from.requires_grad == False
+        assert embedded_from_reference.requires_grad == False
         batch_size = embedding_to.shape[0]
         if batch_size == 0:
             return torch.tensor(0).to(dtype=torch.float32)
@@ -255,8 +224,52 @@ class TemporalEdgeLoss(nn.Module):
             repulsion_strength=self._repulsion_strength,
         )
 
-        return torch.mean(ce_loss )
+        loss1 = torch.mean(ce_loss)
+        # TODO margin to be uncertainty
+        loss2 = torch.mean(torch.clamp(torch.norm(embedded_from_reference-embedding_from, dim=1)-margin, min=0))
+        return loss1+loss2
+        ##################################################
+        # strategy 2
+        # embedding_from does not have gradient
+        # assert embedded_from_reference.requires_grad == False
+        # batch_size = embedding_to.shape[0]
+        # if batch_size == 0:
+        #     return torch.tensor(0).to(dtype=torch.float32)
+        # # get negative samples
+        # embedding_neg_to = torch.repeat_interleave(embedding_to, self._negative_sample_rate, dim=0)
+        # repeat_neg = torch.repeat_interleave(embedded_from_reference, self._negative_sample_rate, dim=0)
+        # randperm = torch.randperm(batch_size*self._negative_sample_rate)
+        # embedding_neg_from = repeat_neg[randperm]
 
+        # distance_embedding = torch.cat(
+        #     (
+        #         torch.norm(embedding_to - embedded_from_reference, dim=1),
+        #         torch.norm(embedding_neg_to - embedding_neg_from, dim=1),
+        #     ),
+        #     dim=0,
+        # )
+        # probabilities_distance = convert_distance_to_probability(
+        #     distance_embedding, self.a, self.b
+        # )
+
+        # # set true probabilities based on negative sampling
+        # probabilities_graph = torch.zeros_like(probabilities_distance)
+        # probabilities_graph[:batch_size] = 1
+
+        # # compute cross entropy
+        # (_, _, ce_loss) = compute_cross_entropy(
+        #     probabilities_graph,
+        #     probabilities_distance,
+        #     repulsion_strength=self._repulsion_strength,
+        # )
+
+        # return torch.mean(ce_loss)
+
+'''
+two strategies:
+1. learn to project prev data and set a margin -> smooth loss
+2. fix prev embedding -> Temporal edge loss
+'''
 class splittDVILoss(nn.Module):
     def __init__(self, umap_loss, recon_loss, temporal_edge_loss):
         super(splittDVILoss, self).__init__()
@@ -264,14 +277,14 @@ class splittDVILoss(nn.Module):
         self.recon_loss = recon_loss
         self.temporal_loss = temporal_edge_loss
 
-    def forward(self, edge_to, edge_from, a_to, a_from, embedded_from,outputs):
+    def forward(self, edge_to, edge_from, a_to, a_from, embedded_from_reference, margin, outputs):
         embedding_to, embedding_from = outputs["umap"]
         recon_to, recon_from = outputs["recon"]
-        embedded_to = outputs["temporal"]
+        embedded_to, embedded_from = outputs["temporal"]
         
         recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from, a_to, a_from)
         umap_l = self.umap_loss(embedding_to, embedding_from) 
-        temporal_l = self.temporal_loss(embedded_to, embedded_from)
+        temporal_l = 2.5*self.temporal_loss(embedded_to, embedded_from, embedded_from_reference, margin)
 
         loss = umap_l + recon_l+ temporal_l
         return umap_l, recon_l, temporal_l, loss

@@ -427,7 +427,7 @@ class SplitTemporalTrainer(SingleVisTrainer):
             t = tqdm(zip(itertools.cycle(self.edge_loader), self.temporal_edge_loader), total=len(self.temporal_edge_loader), leave=True)
         for spatial_data, temporal_data in t:
             edge_to, edge_from, a_to, a_from = spatial_data
-            edge_t_to, edge_t_from, embedded_from = temporal_data
+            edge_t_to, edge_t_from, embedded_from, margins = temporal_data
 
             edge_to = edge_to.to(device=self.DEVICE, dtype=torch.float32)
             edge_from = edge_from.to(device=self.DEVICE, dtype=torch.float32)
@@ -437,17 +437,19 @@ class SplitTemporalTrainer(SingleVisTrainer):
             edge_t_to = edge_t_to.to(device=self.DEVICE, dtype=torch.float32)
             edge_t_from = edge_t_from.to(device=self.DEVICE, dtype=torch.float32)
             embedded_from = embedded_from.to(device=self.DEVICE, dtype=torch.float32)
+            margins = margins.to(device=self.DEVICE, dtype=torch.float32)
             
             embedding_to, recon_to = self.model(edge_to)
             embedding_from, recon_from = self.model(edge_from)
             embedding_t_to, _ = self.model(edge_t_to)
+            embedding_t_from, _ = self.model(edge_t_from)
             
             outputs = dict()
             outputs["umap"] = (embedding_to, embedding_from)
             outputs["recon"] = (recon_to, recon_from)
-            outputs['temporal'] = embedding_t_to
+            outputs['temporal'] = (embedding_t_to, embedding_t_from)
             
-            umap_l, recon_l, temporal_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, embedded_from, outputs)
+            umap_l, recon_l, temporal_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, embedded_from, margins, outputs)
             all_loss.append(loss.item())
             umap_losses.append(umap_l.item())
             recon_losses.append(recon_l.item())

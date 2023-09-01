@@ -6,7 +6,6 @@ import time
 import math
 import json
 import scipy
-# import numba
 
 from umap.umap_ import fuzzy_simplicial_set, make_epochs_per_sample, smooth_knn_dist, compute_membership_strengths
 from pynndescent import NNDescent
@@ -15,6 +14,7 @@ from sklearn.utils import check_random_state
 
 from singleVis.kcenter_greedy import kCenterGreedy
 from singleVis.intrinsic_dim import IntrinsicDim
+from singleVis.subsampling import *
 from singleVis.backend import get_graph_elements, get_attention
 from singleVis.utils import find_neighbor_preserving_rate
 
@@ -281,8 +281,9 @@ Strategies:
 '''
 
 class RandomSpatialEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric) -> None:
+    def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric, ratio) -> None:
         super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric)
+        self.ratio = ratio
     
     def construct(self):
         # dummy input
@@ -299,19 +300,19 @@ class RandomSpatialEdgeConstructor(SpatialEdgeConstructor):
         time_step_idxs_list = list()
 
         train_num = self.data_provider.train_num
-        selected_idxs = np.random.choice(np.arange(train_num), size=self.init_num, replace=False)
-        selected_idxs_t = np.array(range(len(selected_idxs)))
+        curr_selected_idxs = np.arange(train_num)
 
         # each time step
         for t in range(self.data_provider.s, self.data_provider.e+1, self.data_provider.p):
             # load train data and border centers
             train_data = self.data_provider.train_representation(t).squeeze()
 
-            train_data = train_data[selected_idxs]
-            time_step_idxs_list.append(selected_idxs_t.tolist())
+            rs = RandomSampling(train_data[curr_selected_idxs], metric="euclidean")
+            selected_idxs_tmp = rs.sampling(self.ratio)
+            curr_selected_idxs = curr_selected_idxs[selected_idxs_tmp]
 
-            selected_idxs_t = np.random.choice(list(range(len(selected_idxs))), int(0.9*len(selected_idxs)), replace=False)
-            selected_idxs = selected_idxs[selected_idxs_t]
+            train_data = train_data[curr_selected_idxs]
+            time_step_idxs_list.append(curr_selected_idxs.tolist())
 
             if self.b_n_epochs != 0:
                 border_centers = self.data_provider.border_representation(t).squeeze()
@@ -519,7 +520,6 @@ class kcSpatialEdgeConstructor(SpatialEdgeConstructor):
         return edge_to, edge_from, weight, feature_vectors, time_step_nums, time_step_idxs_list, knn_indices, sigmas, rhos, attention
 
 
-
 class kcParallelSpatialEdgeConstructor(SpatialEdgeConstructor):
     def __init__(self, data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric, MAX_HAUSDORFF, ALPHA, BETA) -> None:
         super().__init__(data_provider, init_num, s_n_epochs, b_n_epochs, n_neighbors, metric)
@@ -669,11 +669,10 @@ class SingleEpochSpatialEdgeConstructor(SpatialEdgeConstructor):
         self.metric = metric
     
     def construct(self):
-        # load train data and border centers
         train_data = self.data_provider.train_representation(self.iteration)
-        border_centers = self.data_provider.border_representation(self.iteration).squeeze()
-        train_data = np.concatenate((train_data, border_centers), axis=0)
-        selected = np.random.choice(len(train_data), int(0.3*len(train_data)), replace=False)
+
+        rs = RandomSampling(train_data, metric="euclidean")
+        selected = rs.sampling(0.4)
         train_data = train_data[selected]
 
         if self.b_n_epochs > 0:
@@ -878,8 +877,6 @@ class kcHybridSpatialEdgeConstructor(SpatialEdgeConstructor):
                 time_step_nums.insert(0, (t_num, b_num))
                 coefficient = np.concatenate((np.zeros(len(fitting_data)), coefficient), axis=0)
                 embedded = np.concatenate((np.zeros((len(fitting_data), 2)), embedded), axis=0)
-
-                
 
         return edge_to, edge_from, weight, feature_vectors, embedded, coefficient, time_step_nums, time_step_idxs_list, knn_indices, sigmas, rhos, attention, (c0, d0)
 
@@ -1122,6 +1119,7 @@ class tfEdgeConstructor(SpatialEdgeConstructor):
             
         return edges_to_exp, edges_from_exp, weights_exp, feature_vectors, attention, n_rate
 
+
 class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
     def __init__(self, data_provider, projector, s_n_epochs, b_n_epochs, t_n_epochs, n_neighbors, metric) -> None:
         super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors, metric)
@@ -1139,14 +1137,14 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 working_epochs.append(prev)
             else:
                 break
-        # print(working_epochs)
         # working momery
         read_memory_data = None
         read_memory_embedded = None
         for i in working_epochs:
             # load train data and border centers
             prev_data = self.data_provider.train_representation(i)
-            selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
+            rs = RandomSampling(prev_data, metric="euclidean")
+            selected = rs.sampling(0.01)
             prev_data = prev_data[selected]
             prev_embedded = self.projector.batch_project(i, prev_data)
             if read_memory_data is None:
@@ -1157,14 +1155,7 @@ class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
         return read_memory_data, read_memory_embedded
         
-    def construct(self, prev_iter, next_iter, prev_embedding):
-        # construct working memory
-
-        # load train data and border centers
-        # prev_data = self.data_provider.train_representation(prev_iter)
-        # selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
-        # prev_data = prev_data[selected]
-        # prev_embedded = prev_embedding[selected]
+    def construct(self, next_iter):
         prev_data, prev_embedded = self._construct_working_memory(next_iter)
 
         next_data = self.data_provider.train_representation(next_iter)
@@ -1220,11 +1211,20 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         self.projector = projector
     
     def _construct_working_memory(self, curr):
+        '''
+        1. sequence
+        2. skip some epoch
+        3. estimate by nearest visualizer
+        '''
         # construct working history
         working_epochs = list()
         i = 0
+        skip = 0
+        # if curr - 4 * self.data_provider.p > self.data_provider.s:
+        #     skip = 4
         while True:
             prev = curr - pow(2, i) * self.data_provider.p
+            # prev = curr - (skip + pow(2, i)) * self.data_provider.p
             i = i+1
             if prev >= self.data_provider.s:
                 working_epochs.append(prev)
@@ -1233,25 +1233,42 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         # working momery
         read_memory_data = None
         read_memory_embedded = None
+        margins = None
         for i in working_epochs:
             # load train data and border centers
             prev_data = self.data_provider.train_representation(i)
             # TODO how much prev data used
             selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
             prev_data = prev_data[selected]
-            prev_embedded = self.projector.batch_project(i, prev_data)
+
+            # use prediction as estimation
+            # prev_embedded = self.projector.batch_project(i, prev_data)
+            if i >= (curr- skip*self.data_provider.p) and i>(self.data_provider.s+skip*self.data_provider.p):
+                prev_embedded = self.projector.batch_project(curr- (skip+1)*self.data_provider.p, prev_data)
+                margin_tmp = np.ones(len(prev_embedded))
+            else:
+                prev_embedded = self.projector.batch_project(i, prev_data)
+                margin_tmp = np.zeros(len(prev_embedded))
+            
             if read_memory_data is None:
                 read_memory_data = np.copy(prev_data)
                 read_memory_embedded = np.copy(prev_embedded)
+                margins = np.copy(margin_tmp)
             else:
                 read_memory_data = np.concatenate((read_memory_data, prev_data), axis=0)
                 read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
-        return read_memory_data, read_memory_embedded
+                margins = np.concatenate((margins, margin_tmp), axis=0)
+        return read_memory_data, read_memory_embedded, margins
         
     def construct(self, next_iter):
         # construct working memory
-        prev_data, prev_embedded = self._construct_working_memory(next_iter)
+        prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)
+        
         next_data = self.data_provider.train_representation(next_iter)
+        rs = RandomSampling(next_data, metric=None)
+        selected = rs.sampling(0.4)
+        next_data = next_data[selected]
+
         # temporal edges
         t_complex = self._construct_local_temporal_complex(prev_data, next_data, b_num=0)
         edge_t_to, edge_t_from, weight_t = self._construct_step_edge_dataset(None, None, t_complex)
@@ -1276,7 +1293,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             raise Exception("Illegal border edges proposion!")
         
         # spatial component, temporal component
-        return (edge_to, edge_from, weight, feature_vectors, attention), (edge_t_to, edge_t_from, weight_t, next_data, prev_data, prev_embedded)
+        return (edge_to, edge_from, weight, feature_vectors, attention), (edge_t_to, edge_t_from, weight_t, next_data, prev_data, prev_embedded, margins)
     
     def record_time(self, save_dir, file_name, operation, t):
         file_path = os.path.join(save_dir, file_name+".json")

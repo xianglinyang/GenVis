@@ -231,6 +231,111 @@ class NormalDataProvider(DataProvider):
         evaluation["data_B_gene"] = round(sum(time_borders_gen) / len(time_borders_gen), 3)
         with open(save_dir, 'w') as f:
             json.dump(evaluation, f)
+    
+    def _training_data(self):
+        training_data_path = os.path.join(self.content_path, "Training_data")
+        training_data = torch.load(os.path.join(training_data_path, "training_dataset_data.pth"),
+                                   map_location="cpu")
+        training_data = training_data.to(self.DEVICE)
+        return training_data
+    
+    def _testing_data(self):
+        testing_data_path = os.path.join(self.content_path, "Testing_data")
+        testing_data = torch.load(os.path.join(testing_data_path, "testing_dataset_data.pth"),
+                                       map_location="cpu")
+        testing_data = testing_data.to(self.DEVICE)
+        return testing_data
+
+    
+    # def construct_boundary_manifold(self, n_epoch, num_cls, segment=50):
+    #     '''
+    #     interpolate any two class, for giving guidence to visualize the boundary
+    #     '''
+    #     training_data_path = os.path.join(self.content_path, "Training_data")
+    #     training_data = torch.load(os.path.join(training_data_path, "training_dataset_data.pth"),
+    #                                map_location="cpu")
+    #     training_data = training_data.to(self.DEVICE)
+        
+    #     index_file = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "index.json")
+    #     index = load_labelled_data_index(index_file)
+    #     training_data = training_data[index]
+        
+    #     repr_model = self.feature_function(n_epoch)
+
+    #     border_points, _, _ = get_border_points(model=self.model, input_x=training_data, confs=confs, predictions=preds, device=self.DEVICE, l_bound=l_bound, num_adv_eg=num_adv_eg, lambd=0.05, verbose=0)
+            
+            
+        
+        
+    # def _estimate_boundary(self, num, l_bound):
+    #     '''
+    #     Preprocessing data. This process includes find_border_points and find_border_centers
+    #     save data for later training
+    #     '''
+
+    #     time_borders_gen = list()
+    #     training_data_path = os.path.join(self.content_path, "Training_data")
+    #     training_data = torch.load(os.path.join(training_data_path, "training_dataset_data.pth"),
+    #                                map_location="cpu")
+    #     training_data = training_data.to(self.DEVICE)
+    #     for n_epoch in range(self.s, self.e + 1, self.p):
+    #         index_file = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "index.json")
+    #         index = load_labelled_data_index(index_file)
+    #         training_data = training_data[index]
+
+    #         # model_location = os.path.join(self.model_path, "Epoch_{:d}".format(n_epoch), "subject_model.pth")
+    #         # self.model.load_state_dict(torch.load(model_location, map_location=torch.device("cpu")))
+    #         # self.model = self.model.to(self.DEVICE)
+    #         # self.model.eval()
+    #         # repr_model = torch.nn.Sequential(*(list(self.model.children())[:self.split]))
+    #         repr_model = self.feature_function(n_epoch)
+
+    #         t0 = time.time()
+    #         confs = batch_run(self.model, training_data)
+    #         preds = np.argmax(confs, axis=1).squeeze()
+    #         # TODO how to choose the number of boundary points?
+    #         num_adv_eg = num
+    #         border_points, _, _ = get_border_points(model=self.model, input_x=training_data, confs=confs, predictions=preds, device=self.DEVICE, l_bound=l_bound, num_adv_eg=num_adv_eg, lambd=0.05, verbose=0)
+    #         t1 = time.time()
+    #         time_borders_gen.append(round(t1 - t0, 4))
+
+    #         # get gap layer data
+    #         border_points = border_points.to(self.DEVICE)
+    #         border_centers = batch_run(repr_model, border_points)
+    #         location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "border_centers.npy")
+    #         np.save(location, border_centers)
+
+    #         location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "ori_border_centers.npy")
+    #         np.save(location, border_points.cpu().numpy())
+
+    #         num_adv_eg = num
+    #         border_points, _, _ = get_border_points(model=self.model, input_x=training_data, confs=confs, predictions=preds, device=self.DEVICE, l_bound=l_bound, num_adv_eg=num_adv_eg, lambd=0.05, verbose=0)
+
+    #         # get gap layer data
+    #         border_points = border_points.to(self.DEVICE)
+    #         border_centers = batch_run(repr_model, border_points)
+    #         location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "test_border_centers.npy")
+    #         np.save(location, border_centers)
+
+    #         location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "test_ori_border_centers.npy")
+    #         np.save(location, border_points.cpu().numpy())
+
+    #         if self.verbose > 0:
+    #             print("Finish generating borders for Epoch {:d}...".format(n_epoch))
+    #     print(
+    #         "Average time for generate border points: {:.4f}".format(sum(time_borders_gen) / len(time_borders_gen)))
+
+    #     # save result
+    #     save_dir = os.path.join(self.model_path, "time.json")
+    #     if not os.path.exists(save_dir):
+    #         evaluation = dict()
+    #     else:
+    #         f = open(save_dir, "r")
+    #         evaluation = json.load(f)
+    #         f.close()
+    #     evaluation["data_B_gene"] = round(sum(time_borders_gen) / len(time_borders_gen), 3)
+    #     with open(save_dir, 'w') as f:
+    #         json.dump(evaluation, f)
 
     def initialize(self, num, l_bound):
         self._meta_data()
@@ -342,6 +447,14 @@ class NormalDataProvider(DataProvider):
 
         fea_fn = self.model.feature
         return fea_fn
+    
+    def model_function(self, epoch):
+        model_location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, epoch), "subject_model.pth")
+        self.model.load_state_dict(torch.load(model_location, map_location=torch.device("cpu")))
+        self.model = self.model.to(self.DEVICE)
+        self.model.eval()
+
+        return self.model
 
     def get_pred(self, epoch, data):
         '''

@@ -32,6 +32,14 @@ class SubSampling(ABC):
         pass
 
 
+class IdentitySampling(SubSampling):
+    def __init__(self, data, metric) -> None:
+        super().__init__(data, metric)
+    
+    def sampling(self):
+        return np.arange(len(self.data))
+
+
 class RandomSampling(SubSampling):
     def __init__(self, data, metric) -> None:
         super().__init__(data, metric)

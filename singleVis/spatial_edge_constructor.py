@@ -8,6 +8,7 @@ import json
 import scipy
 
 from umap.umap_ import fuzzy_simplicial_set, make_epochs_per_sample, smooth_knn_dist, compute_membership_strengths
+from scipy.spatial import distance
 from pynndescent import NNDescent
 from sklearn.neighbors import NearestNeighbors
 from sklearn.utils import check_random_state
@@ -663,16 +664,16 @@ class kcParallelSpatialEdgeConstructor(SpatialEdgeConstructor):
     
 
 class SingleEpochSpatialEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, iteration, s_n_epochs, b_n_epochs, n_neighbors, metric) -> None:
+    def __init__(self, data_provider, iteration, s_n_epochs, b_n_epochs, n_neighbors, metric, sampler) -> None:
         super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors, metric)
         self.iteration = iteration
         self.metric = metric
+        self.sampler = sampler
     
     def construct(self):
         train_data = self.data_provider.train_representation(self.iteration)
-
-        rs = RandomSampling(train_data, metric="euclidean")
-        selected = rs.sampling(0.4)
+        
+        selected = self.sampler.sampling(train_data)
         train_data = train_data[selected]
 
         if self.b_n_epochs > 0:
@@ -1120,111 +1121,25 @@ class tfEdgeConstructor(SpatialEdgeConstructor):
         return edges_to_exp, edges_from_exp, weights_exp, feature_vectors, attention, n_rate
 
 
-class LocalSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
-    def __init__(self, data_provider, projector, s_n_epochs, b_n_epochs, t_n_epochs, n_neighbors, metric) -> None:
-        super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors, metric)
-        self.t_n_epochs = t_n_epochs
-        self.projector = projector
-    
-    def _construct_working_memory(self, curr):
-        # construct working history
-        working_epochs = list()
-        i = 0
-        while True:
-            prev = curr - pow(2, i) * self.data_provider.p
-            i = i+1
-            if prev >= self.data_provider.s:
-                working_epochs.append(prev)
-            else:
-                break
-        # working momery
-        read_memory_data = None
-        read_memory_embedded = None
-        for i in working_epochs:
-            # load train data and border centers
-            prev_data = self.data_provider.train_representation(i)
-            rs = RandomSampling(prev_data, metric="euclidean")
-            selected = rs.sampling(0.01)
-            prev_data = prev_data[selected]
-            prev_embedded = self.projector.batch_project(i, prev_data)
-            if read_memory_data is None:
-                read_memory_data = np.copy(prev_data)
-                read_memory_embedded = np.copy(prev_embedded)
-            else:
-                read_memory_data = np.concatenate((read_memory_data, prev_data), axis=0)
-                read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
-        return read_memory_data, read_memory_embedded
-        
-    def construct(self, next_iter):
-        prev_data, prev_embedded = self._construct_working_memory(next_iter)
-
-        next_data = self.data_provider.train_representation(next_iter)
-
-        # concatenate prev_data to the last
-        if self.b_n_epochs > 0:
-            border_centers = self.data_provider.border_representation(next_iter).squeeze()
-            complex, sigmas, rhos, _ = self._construct_fuzzy_complex(next_data)
-            bw_complex, _, _, _ = self._construct_boundary_wise_complex(next_data, border_centers, sigmas, rhos)
-            t_complex = self._construct_local_temporal_complex(prev_data, next_data, b_num=len(border_centers))
-            edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, bw_complex, t_complex)
-            feature_vectors = np.concatenate((next_data, border_centers, prev_data), axis=0)
-            # pred_model = self.data_provider.prediction_function(self.iteration)
-            # attention = get_attention(pred_model, feature_vectors, temperature=.01, device=self.data_provider.DEVICE, verbose=1)
-            attention = np.zeros(feature_vectors.shape)
-        elif self.b_n_epochs == 0:
-            complex, _, _, _ = self._construct_fuzzy_complex(next_data)
-            t_complex = self._construct_local_temporal_complex(prev_data, next_data, b_num=0)
-            edge_to, edge_from, weight = self._construct_step_edge_dataset(complex, None, t_complex)
-            feature_vectors = np.concatenate((next_data, prev_data), axis=0)
-            # pred_model = self.data_provider.prediction_function(self.iteration)
-            # attention = get_attention(pred_model, feature_vectors, temperature=.01, device=self.data_provider.DEVICE, verbose=1)            
-            attention = np.zeros(feature_vectors.shape)
-        else: 
-            raise Exception("Illegal border edges proposion!")
-        
-        coefficient = np.zeros(len(feature_vectors))
-        coefficient[-len(prev_embedded):] = 1
-        embedded = np.zeros((len(feature_vectors), 2))
-        embedded[-len(prev_embedded):] = prev_embedded
-            
-        return edge_to, edge_from, weight, feature_vectors, attention, coefficient, embedded
-    
-    def record_time(self, save_dir, file_name, operation, t):
-        file_path = os.path.join(save_dir, file_name+".json")
-        if os.path.exists(file_path):
-            with open(file_path, "r") as f:
-                ti = json.load(f)
-        else:
-            ti = dict()
-        if operation not in ti.keys():
-            ti[operation] = dict()
-        ti[operation][str(self.iteration)] = t
-        with open(file_path, "w") as f:
-            json.dump(ti, f)
-
-
 class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
     '''split temporal and spatial edges, then train them separately'''
-    def __init__(self, data_provider, projector, s_n_epochs, b_n_epochs, t_n_epochs, n_neighbors, metric) -> None:
+    def __init__(self, data_provider, projector, s_n_epochs, b_n_epochs, t_n_epochs, n_neighbors, metric, sampler) -> None:
         super().__init__(data_provider, 100, s_n_epochs, b_n_epochs, n_neighbors, metric)
         self.t_n_epochs = t_n_epochs
         self.projector = projector
-    
+        self.sampler = sampler
+    '''
+    1. sequence
+    2. skip some epoch
+    3. estimate by nearest visualizer
+    '''
+    # TODO: move this class to temporal edge construction
     def _construct_working_memory(self, curr):
-        '''
-        1. sequence
-        2. skip some epoch
-        3. estimate by nearest visualizer
-        '''
         # construct working history
         working_epochs = list()
         i = 0
-        skip = 0
-        # if curr - 4 * self.data_provider.p > self.data_provider.s:
-        #     skip = 4
         while True:
             prev = curr - pow(2, i) * self.data_provider.p
-            # prev = curr - (skip + pow(2, i)) * self.data_provider.p
             i = i+1
             if prev >= self.data_provider.s:
                 working_epochs.append(prev)
@@ -1242,14 +1157,113 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             prev_data = prev_data[selected]
 
             # use prediction as estimation
-            # prev_embedded = self.projector.batch_project(i, prev_data)
-            if i >= (curr- skip*self.data_provider.p) and i>(self.data_provider.s+skip*self.data_provider.p):
-                prev_embedded = self.projector.batch_project(curr- (skip+1)*self.data_provider.p, prev_data)
-                margin_tmp = np.ones(len(prev_embedded))
+            prev_embedded = self.projector.batch_project(i, prev_data)
+            margin_tmp = np.ones(len(prev_embedded))
+            
+            if read_memory_data is None:
+                read_memory_data = np.copy(prev_data)
+                read_memory_embedded = np.copy(prev_embedded)
+                margins = np.copy(margin_tmp)
+            else:
+                read_memory_data = np.concatenate((read_memory_data, prev_data), axis=0)
+                read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
+                margins = np.concatenate((margins, margin_tmp), axis=0)
+        return read_memory_data, read_memory_embedded, margins
+    
+    def _construct_working_memory_skip(self, curr, missing_window):
+        # construct working history
+        working_epochs = list()
+        i = 0
+        # if less than missing window, dont skip
+        if curr - missing_window < self.data_provider.s:
+            skip = 0
+        else:
+            skip = missing_window
+        while True:
+            prev = curr - (skip + pow(2, i)) * self.data_provider.p
+            i = i+1
+            if prev >= self.data_provider.s:
+                working_epochs.append(prev)
+            else:
+                break
+        # working momery
+        read_memory_data = None
+        read_memory_embedded = None
+        margins = None
+        for i in working_epochs:
+            # load train data and border centers
+            prev_data = self.data_provider.train_representation(i)
+            # TODO how much prev data used
+            selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
+            prev_data = prev_data[selected]
+
+            # use prediction as estimation
+            prev_embedded = self.projector.batch_project(i, prev_data)
+            margin_tmp = np.ones(len(prev_embedded))
+
+            if read_memory_data is None:
+                read_memory_data = np.copy(prev_data)
+                read_memory_embedded = np.copy(prev_embedded)
+                margins = np.copy(margin_tmp)
+            else:
+                read_memory_data = np.concatenate((read_memory_data, prev_data), axis=0)
+                read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
+                margins = np.concatenate((margins, margin_tmp), axis=0)
+        return read_memory_data, read_memory_embedded, margins
+    
+    def _uncertainty_measure(self, prev_e, next_e):
+        prev_data = self.data_provider.train_representation(prev_e)
+        next_data = self.data_provider.train_representation(next_e)
+        mean_t = prev_data.mean(axis=0)
+        std_t = prev_data.std(axis=0)
+        mean_tk = next_data.mean(axis=0)
+        std_tk = next_data.std(axis=0)
+
+        # Assuming variables are uncorrelated, create diagonal covariance matrices
+        covariance_matrix_t = np.diag(std_t**2)
+        covariance_matrix_t_plus_k = np.diag(std_tk**2)
+
+        # Calculate the Mahalanobis distance
+        margins = distance.mahalanobis(mean_t, mean_tk, np.linalg.inv(covariance_matrix_t))
+        return margins
+
+    def _construct_working_memory_estimation(self, curr, missing_window):
+        # construct working history
+        working_epochs = list()
+        i = 0
+        while True:
+            prev = curr - pow(2, i) * self.data_provider.p
+            i = i+1
+            if prev >= self.data_provider.s:
+                working_epochs.append(prev)
+            else:
+                break
+        # working momery
+        read_memory_data = None
+        read_memory_embedded = None
+        margins = None
+        for i in working_epochs:
+            # load train data and border centers
+            prev_data = self.data_provider.train_representation(i)
+            # TODO how much prev data used
+            selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
+            prev_data = prev_data[selected]
+
+            # use prediction as estimation
+            if i >= (curr- missing_window*self.data_provider.p):
+                if i < (self.data_provider.s+missing_window*self.data_provider.p):
+                    prev_embedded = self.projector.batch_project(self.data_provider.s, prev_data)
+                    margin_tmp = self._uncertainty_measure(self.data_provider.s, curr) * np.ones(len(prev_embedded))
+                else:
+                    pseudo_epoch = curr- (missing_window+1)*self.data_provider.p
+                    prev_embedded = self.projector.batch_project(pseudo_epoch, prev_data)
+                    margin_tmp = self._uncertainty_measure(pseudo_epoch, curr) * np.ones(len(prev_embedded))
             else:
                 prev_embedded = self.projector.batch_project(i, prev_data)
-                margin_tmp = np.zeros(len(prev_embedded))
+                margin_tmp = 0.5*np.ones(len(prev_embedded))
             
+            margin_tmp = np.clip(margin_tmp, a_min=0.5, a_max=margin_tmp.max())
+
             if read_memory_data is None:
                 read_memory_data = np.copy(prev_data)
                 read_memory_embedded = np.copy(prev_embedded)
@@ -1262,11 +1276,11 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         
     def construct(self, next_iter):
         # construct working memory
-        prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)
+        # prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)
+        prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 4)
         
         next_data = self.data_provider.train_representation(next_iter)
-        rs = RandomSampling(next_data, metric=None)
-        selected = rs.sampling(0.4)
+        selected = self.sampler.sampling(next_data)
         next_data = next_data[selected]
 
         # temporal edges

@@ -23,9 +23,8 @@ from singleVis.utils import knn
 
 class SubSampling(ABC):
     @abstractmethod
-    def __init__(self, data, metric) -> None:
-        self.data = data
-        self.metric = metric
+    def __init__(self) -> None:
+        pass
 
     @abstractmethod
     def sampling(self, *args, **kwargs):
@@ -33,101 +32,114 @@ class SubSampling(ABC):
 
 
 class IdentitySampling(SubSampling):
-    def __init__(self, data, metric) -> None:
-        super().__init__(data, metric)
+    def __init__(self) -> None:
+        super().__init__()
     
-    def sampling(self):
-        return np.arange(len(self.data))
+    def sampling(self, data):
+        return np.arange(len(data))
 
 
 class RandomSampling(SubSampling):
-    def __init__(self, data, metric) -> None:
-        super().__init__(data, metric)
+    def __init__(self, ratio) -> None:
+        super().__init__()
+        self.ratio = ratio
     
-    def sampling(self, ratio):
-        num = len(self.data)
-        selected_idxs = np.random.choice(num, int(ratio*num), replace=False)
+    def sampling(self, data):
+        num = len(data)
+        selected_idxs = np.random.choice(num, int(self.ratio*num), replace=False)
         return selected_idxs
+    
+
+class DensityAwareSampling(SubSampling):
+    '''Dynamically choose a ratio such that the changing density is minimized'''
+    def __init__(self) -> None:
+        super().__init__()
+
+    def sampling(self):
+        pass
 
 
 class CoresetSampling(SubSampling):
-    def __init__(self, data, metric) -> None:
-        super().__init__(data, metric)
-    
-    def sampling(self, ratio, metric=None):
-        if metric is None:
-            metric = self.metric
-        target_num = int(len(self.data)*ratio)
+    def __init__(self, ratio, metric) -> None:
+        super().__init__()
+        self.ratio = ratio
+        self.metric = metric
+
+    def sampling(self, data):
+        target_num = int(len(data)*self.ratio)
         assert target_num > 100
-        random_init_idxs = np.random.choice(len(self.data), size=100, replace=False)
-        kc = kCenterGreedy(self.data, metric=metric)
+        random_init_idxs = np.random.choice(len(data), size=100, replace=False)
+        kc = kCenterGreedy(data, metric=self.metric)
         _ = kc.select_batch_with_budgets(random_init_idxs, target_num-100)
         return kc.already_selected
 
 
-class DensityAwareSampling(SubSampling):
-    def __init__(self, data, n_classes, k, metric) -> None:
-        super().__init__(data, metric)
-        self.n_classes = n_classes
-        self._compute_density(k)
-    
-    def _compute_density(self, k, metric=None):
-        if metric is None:
-            metric  = self.metric
-        _, knn_dists = knn(self.data, k, metric)
-        avg_distance = knn_dists[:, -1]
-        density = k / avg_distance
-        # assign density as a property
-        self.density = density
-        print("Finish computing density...")
-        return density, avg_distance.mean()
+# class DensityAwareSampling(SubSampling):
 
-    def sampling(self, ratio, temperature):
-        num = len(self.data)
-        target_num = int(len(self.data)*ratio)
+#     def __init__(self, n_classes, n_neighbors, ratio, temperature, metric) -> None:
+#         super().__init__()
+#         self.n_classes = n_classes
+#         self.n_neighbors = n_neighbors
+#         self.metric = metric
+#         self.ratio = ratio
+#         self.temperature = temperature
+#         self._compute_density(k)
 
-        # separate data into n_classes groups
-        print("Start to categorize density...")
-        jnb = JenksNaturalBreaks(self.n_classes)
-        jnb.fit(self.density)
-        print("Finish to categorize density...")
-        # [0 0 0 1 1 1 2 2 2 3 3 3]
-        self.labels = jnb.labels_
+#     def _compute_density(self, data):
+#         _, knn_dists = knn(data, self.n_neighbors, self.metric)
+#         avg_distance = knn_dists[:, -1]
+#         density = self.n_neighbors / avg_distance
+#         # assign density as a property
+#         self.density = density
+#         print("Finish computing density...")
+#         return density, avg_distance.mean()
 
-        # assign a selection ratio to each group
-        self.group = list()
-        group_nums = list()
-        for group in range(self.n_classes):
-            group_idxs = np.argwhere(self.labels == group).squeeze()
-            self.group.append(group_idxs)
-            group_nums.append(len(group_idxs))
+#     def sampling(self, data):
+#         num = len(data)
+#         target_num = int(len(data)*self.ratio)
 
-        group_nums = np.array(group_nums)
-        group_ratios = softmax((1 - group_nums/num)/temperature)
-        # group_ratios = softmax((group_nums/num)/temperature)
-        group_selected_num = (target_num*group_ratios).astype(int)
-        print(f"density: {self.density}\nSelected num: {group_selected_num}\nGroup num:{group_nums}\n")
+#         # separate data into n_classes groups
+#         print("Start to categorize density...")
+#         jnb = JenksNaturalBreaks(self.n_classes)
+#         jnb.fit(self.density)
+#         print("Finish to categorize density...")
+#         # [0 0 0 1 1 1 2 2 2 3 3 3]
+#         self.labels = jnb.labels_
 
-        # coreset sampling for each region
-        selected_idxs = list()
-        for group, selected_num in zip(self.group, group_selected_num):
-            # in this case we use random
-            # in case not enough group num
-            if selected_num>= len(group):
-                selected_idxs.extend(group.tolist())
-            else:
-                assert selected_num > 100
-                kc = kCenterGreedy(self.data[group], metric=self.metric)
-                random_init_idxs = np.random.choice(len(group), size=100, replace=False)
-                _ = kc.select_batch_with_budgets(random_init_idxs, selected_num-100)
-                selected_group_idxs = group[kc.already_selected]
+#         # assign a selection ratio to each group
+#         self.group = list()
+#         group_nums = list()
+#         for group in range(self.n_classes):
+#             group_idxs = np.argwhere(self.labels == group).squeeze()
+#             self.group.append(group_idxs)
+#             group_nums.append(len(group_idxs))
+
+#         group_nums = np.array(group_nums)
+#         group_ratios = softmax((1 - group_nums/num)/self.temperature)
+#         # group_ratios = softmax((group_nums/num)/temperature)
+#         group_selected_num = (target_num*group_ratios).astype(int)
+#         print(f"density: {self.density}\nSelected num: {group_selected_num}\nGroup num:{group_nums}\n")
+
+#         # coreset sampling for each region
+#         selected_idxs = list()
+#         for group, selected_num in zip(self.group, group_selected_num):
+#             # in this case we use random
+#             # in case not enough group num
+#             if selected_num>= len(group):
+#                 selected_idxs.extend(group.tolist())
+#             else:
+#                 assert selected_num > 100
+#                 kc = kCenterGreedy(data[group], metric=self.metric)
+#                 random_init_idxs = np.random.choice(len(group), size=100, replace=False)
+#                 _ = kc.select_batch_with_budgets(random_init_idxs, selected_num-100)
+#                 selected_group_idxs = group[kc.already_selected]
                 
-                # selected_group_idxs = np.random.choice(group, selected_num, replace=False)
-                selected_idxs.extend(selected_group_idxs.tolist())
+#                 # selected_group_idxs = np.random.choice(group, selected_num, replace=False)
+#                 selected_idxs.extend(selected_group_idxs.tolist())
             
-        # return selected_idxs
-        print(f"Select {len(selected_idxs)} data points...")
-        return np.asarray(selected_idxs)
+#         # return selected_idxs
+#         print(f"Select {len(selected_idxs)} data points...")
+#         return np.asarray(selected_idxs)
 
 # random sampling
 # train_data = data_provider.train_representation(I)

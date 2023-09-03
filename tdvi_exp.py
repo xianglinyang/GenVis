@@ -13,6 +13,7 @@ from singleVis.vis_models import vis_models as vmodels
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss, TemporalEdgeLoss, splittDVILoss
 from singleVis.edge_dataset import DataHandler, DVIDataHandler, SplitTemporalDataHandler, create_dataloader
 from singleVis.trainer import SingleVisTrainer, SplitTemporalTrainer
+from singleVis.subsampling import RandomSampling
 from singleVis.data import NormalDataProvider
 from singleVis.spatial_edge_constructor import SplitSpatialTemporalEdgeConstructor, SingleEpochSpatialEdgeConstructor
 from singleVis.projector import DVIProjector
@@ -135,7 +136,8 @@ lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
 # Define Edge dataset
 t0 = time.time()
 
-spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, EPOCH_START, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean")
+sampler = RandomSampling(0.4)
+spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, EPOCH_START, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
 edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
 
 # Construct two dataset and train on them separately
@@ -161,7 +163,8 @@ for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_P
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
     
     # Define Edge dataset
-    spatial_cons = SplitSpatialTemporalEdgeConstructor(data_provider, projector, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean")
+    sampler = RandomSampling(0.4)
+    spatial_cons = SplitSpatialTemporalEdgeConstructor(data_provider, projector, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
     t0 = time.time()
     spatial_component, temporal_component = spatial_cons.construct(iteration)
     edge_to, edge_from, weights, feature_vectors, attention = spatial_component

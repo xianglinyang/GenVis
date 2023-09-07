@@ -1,7 +1,6 @@
 
 from abc import ABC, abstractmethod
 
-from time import time
 import numpy as np
 import scipy
 
@@ -242,8 +241,6 @@ class LocalTemporalEdgeConstructor(TemporalEdgeConstructor):
         _, heads, tails, weights, _ = get_graph_elements(time_complex, n_epochs=self.n_epochs)
         
         return heads, tails, weights
-
-
 
 
 class GlobalTemporalEdgeConstructor(TemporalEdgeConstructor):

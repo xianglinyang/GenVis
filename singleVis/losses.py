@@ -284,7 +284,7 @@ class splittDVILoss(nn.Module):
         
         recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from, a_to, a_from)
         umap_l = self.umap_loss(embedding_to, embedding_from) 
-        temporal_l = 2.5*self.temporal_loss(embedded_to, embedded_from, embedded_from_reference, margin)
+        temporal_l = self.temporal_loss(embedded_to, embedded_from, embedded_from_reference, margin)
 
         loss = umap_l + recon_l+ temporal_l
         return umap_l, recon_l, temporal_l, loss

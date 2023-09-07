@@ -19,7 +19,7 @@ from singleVis.data import NormalDataProvider
 from singleVis.spatial_edge_constructor import SingleEpochSpatialEdgeConstructor
 from singleVis.projector import DVIProjector
 from singleVis.eval.evaluator import Evaluator
-from singleVis.subsampling import DensityAwareSampling
+from singleVis.subsampling import RandomSampling
 
 ########################################################################################################################
 #                                                     DVI PARAMETERS                                                   #
@@ -70,6 +70,7 @@ EPOCH_NAME = config["EPOCH_NAME"]
 # Training parameter (visualization model)
 VISUALIZATION_PARAMETER = config["VISUALIZATION"]
 VIS_MODEL = VISUALIZATION_PARAMETER["VIS_MODEL"]
+# VIS_MODEL = "cnAE"
 LAMBDA = VISUALIZATION_PARAMETER["LAMBDA"]
 B_N_EPOCHS = VISUALIZATION_PARAMETER["BOUNDARY"]["B_N_EPOCHS"]
 L_BOUND = VISUALIZATION_PARAMETER["BOUNDARY"]["L_BOUND"]
@@ -119,19 +120,12 @@ criterion = SingleVisLoss(umap_loss_fn, recon_loss_fn, lambd=LAMBDA)
 # Define training parameters
 optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
+
+sampler = RandomSampling(1)
 # Define Edge dataset
 t0 = time.time()
-spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, I, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean")
-
-# sampling with different strategies
-train_data = data_provider.train_representation(I)
-
-# das = DensityAwareSampling(train_data, n_classes=15, k=10, metric="euclidean")
-# selected = das.sampling(ratio=RATIO, temperature=1)
-# # selected = np.random.choice(len(train_data), 4620, replace=False)
-# train_data = train_data[selected]
-
-edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct(train_data)
+spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, I, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
+edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
 t1 = time.time()
 
 dataset = DataHandler(edge_to, edge_from, feature_vectors, attention)
@@ -176,14 +170,7 @@ trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
 from singleVis.visualizer import visualizer
 
 vis = visualizer(data_provider, projector, 200, "tab10")
-save_dir = os.path.join(data_provider.content_path, "img")
-if not os.path.exists(save_dir):
-    os.mkdir(save_dir)
-# vis.savefig(I, f"{VIS_METHOD}_{VIS_MODEL}_{I}_{RATIO}.png")
-pred = data_provider.get_pred(I, train_data).argmax(axis=1)
-# labels = data_provider.train_labels(I)[selected]
-labels = data_provider.train_labels(I)
-vis.savefig_cus(I, train_data, pred, labels, f"{VIS_METHOD}_{VIS_MODEL}_{I}_{RATIO}.png")
+vis.savefig(I, f"{VIS_METHOD}_{VIS_MODEL}_{I}_{RATIO}.png")
 
 
 ########################################################################################################################

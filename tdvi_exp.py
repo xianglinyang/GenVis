@@ -42,6 +42,7 @@ VIS_MODEL = 'cnAE'
 parser = argparse.ArgumentParser(description='Process hyperparameters...')
 parser.add_argument('--content_path', '-c', type=str)
 parser.add_argument('--setting', '-s', type=str)
+parser.add_argument('--resume', '-r', type=int, default=0)
 args = parser.parse_args()
 
 ########################################################################################################################
@@ -49,6 +50,8 @@ args = parser.parse_args()
 ########################################################################################################################
 CONTENT_PATH = args.content_path
 comment = args.setting
+RESUME = args.resume
+
 sys.path.append(CONTENT_PATH)
 with open(os.path.join(CONTENT_PATH, "config.json"), "r") as f:
     config = json.load(f)
@@ -133,29 +136,34 @@ evaluator = Evaluator(data_provider, projector, metric="euclidean")
 # Define training parameters
 optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
+
+if RESUME < EPOCH_START:
 # Define Edge dataset
-t0 = time.time()
+    t0 = time.time()
 
-sampler = RandomSampling(0.4)
-spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, EPOCH_START, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
-edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
+    sampler = RandomSampling(0.4)
+    spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, EPOCH_START, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
+    edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
 
-# Construct two dataset and train on them separately
-dataset = DVIDataHandler(edge_to, edge_from, feature_vectors, attention)
-edge_loader = create_dataloader(dataset, S_N_EPOCHS, probs, len(edge_to))
+    # Construct two dataset and train on them separately
+    dataset = DVIDataHandler(edge_to, edge_from, feature_vectors, attention)
+    edge_loader = create_dataloader(dataset, S_N_EPOCHS, probs, len(edge_to))
 
-# train
-trainer = SingleVisTrainer(model, single_loss_fn, optimizer, lr_scheduler, edge_loader=edge_loader, DEVICE=DEVICE)
-train_epoch, time_spent = trainer.train(PATIENT, MAX_EPOCH)
+    # train
+    trainer = SingleVisTrainer(model, single_loss_fn, optimizer, lr_scheduler, edge_loader=edge_loader, DEVICE=DEVICE)
+    train_epoch, time_spent = trainer.train(PATIENT, MAX_EPOCH)
 
-save_dir = os.path.join(data_provider.model_path, f"{EPOCH_NAME}_{EPOCH_START}")
-trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
-trainer.record_time(data_provider.model_path, "time_{}".format(VIS_MODEL_NAME), "training", EPOCH_START, (train_epoch, time_spent))
+    save_dir = os.path.join(data_provider.model_path, f"{EPOCH_NAME}_{EPOCH_START}")
+    trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
+    trainer.record_time(data_provider.model_path, "time_{}".format(VIS_MODEL_NAME), "training", EPOCH_START, (train_epoch, time_spent))
 
-vis.savefig(EPOCH_START, f"{VIS_METHOD}_{VIS_MODEL}_{EPOCH_START}_{comment}.png")
-evaluator.save_epoch_eval(EPOCH_START, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
+    vis.savefig(EPOCH_START, f"{VIS_METHOD}_{VIS_MODEL}_{EPOCH_START}_{comment}.png")
+    evaluator.save_epoch_eval(EPOCH_START, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
+    RESUME = EPOCH_START
+else:
+    projector.load(RESUME)
 
-for iteration in range(EPOCH_START+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
+for iteration in range(RESUME+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
     # Define Criterion
     criterion = splittDVILoss(umap_loss_fn, recon_loss_fn, temporal_loss_fn)
     # Define training parameters

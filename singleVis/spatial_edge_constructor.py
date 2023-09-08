@@ -1134,6 +1134,46 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
     3. estimate by nearest visualizer
     '''
     # TODO: move this class to temporal edge construction
+
+    def _construct_single_memory(self, curr, prev):
+        # load train data and border centers
+        prev_data = self.data_provider.train_representation(prev)
+        # count dist
+        dist = self._uncertainty_measure(prev, curr)
+
+        # TODO how much prev data used
+        selected = np.random.choice(len(prev_data), int(0.1*len(prev_data)), replace=False)
+        prev_data = prev_data[selected]
+
+        # use prediction as estimation
+        prev_embedded = self.projector.batch_project(prev, prev_data)
+        xy_range = np.ptp(prev_embedded, axis=0)
+
+        # TODO clip margin?
+        dist = np.clip(dist, a_min=0, a_max=0.1)
+        margin = dist*np.linalg.norm(xy_range)* np.ones(len(prev_embedded))
+        return prev_data, prev_embedded, margin
+    
+    def _construct_single_memory_estimation(self, curr, prev, pseudo_epoch):
+        '''use the fake_prev to estimate prev'''
+
+        prev_data = self.data_provider.train_representation(prev)
+        dist = self._uncertainty_measure(prev, curr)
+
+        # TODO how much prev data used
+        selected = np.random.choice(len(prev_data), int(0.1*len(prev_data)), replace=False)
+        prev_data = prev_data[selected]
+
+        # use prediction as estimation
+        prev_embedded = self.projector.batch_project(pseudo_epoch, prev_data)
+        xy_range = np.ptp(prev_embedded, axis=0)
+
+        # TODO clip margin?
+        dist = np.clip(dist, a_min=0, a_max=0.1)
+        # set to be two times bigger than sequence
+        margin = 2*dist*np.linalg.norm(xy_range)* np.ones(len(prev_embedded))
+        return prev_data, prev_embedded, margin
+
     def _construct_working_memory(self, curr):
         # construct working history
         working_epochs = list()
@@ -1150,19 +1190,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         read_memory_embedded = None
         margins = None
         for i in working_epochs:
-            # load train data and border centers
-            prev_data = self.data_provider.train_representation(i)
-            # count dist
-            dist = self._uncertainty_measure(i, curr)
-            # TODO how much prev data used
-            selected = np.random.choice(len(prev_data), int(0.1*len(prev_data)), replace=False)
-            prev_data = prev_data[selected]
-
-            # use prediction as estimation
-            prev_embedded = self.projector.batch_project(i, prev_data)
-            xy_range = np.ptp(prev_embedded, axis=0)
-            margin_tmp = dist*np.linalg.norm(xy_range)* np.ones(len(prev_embedded))
-            
+            prev_data, prev_embedded, margin_tmp = self._construct_single_memory(curr, i)
             if read_memory_data is None:
                 read_memory_data = np.copy(prev_data)
                 read_memory_embedded = np.copy(prev_embedded)
@@ -1194,16 +1222,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         read_memory_embedded = None
         margins = None
         for i in working_epochs:
-            # load train data and border centers
-            prev_data = self.data_provider.train_representation(i)
-            # TODO how much prev data used
-            selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
-            prev_data = prev_data[selected]
-
-            # use prediction as estimation
-            prev_embedded = self.projector.batch_project(i, prev_data)
-            margin_tmp = np.ones(len(prev_embedded))
-
+            prev_data, prev_embedded, margin_tmp = self._construct_single_memory(curr, i)
             if read_memory_data is None:
                 read_memory_data = np.copy(prev_data)
                 read_memory_embedded = np.copy(prev_embedded)
@@ -1251,27 +1270,16 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         read_memory_data = None
         read_memory_embedded = None
         margins = None
-        for i in working_epochs:
-            # load train data and border centers
-            prev_data = self.data_provider.train_representation(i)
-            # TODO how much prev data used
-            selected = np.random.choice(len(prev_data), int(0.1*len(prev_data)), replace=False)
-            prev_data = prev_data[selected]
 
+        for i in working_epochs:
             # use prediction as estimation
             if i >= (curr- missing_window*self.data_provider.p):
-                if i < (self.data_provider.s+missing_window*self.data_provider.p):
-                    prev_embedded = self.projector.batch_project(self.data_provider.s, prev_data)
-                    margin_tmp = self._uncertainty_measure(self.data_provider.s, curr) * np.ones(len(prev_embedded))
-                else:
-                    pseudo_epoch = curr- (missing_window+1)*self.data_provider.p
-                    prev_embedded = self.projector.batch_project(pseudo_epoch, prev_data)
-                    margin_tmp = (0.2+self._uncertainty_measure(pseudo_epoch, curr)) * np.ones(len(prev_embedded))
+                pseudo_epoch = curr- (missing_window+1)*self.data_provider.p
+                if pseudo_epoch < self.data_provider.s:
+                    pseudo_epoch = self.data_provider.s
+                prev_data, prev_embedded, margin_tmp = self._construct_single_memory_estimation(curr, i, pseudo_epoch)
             else:
-                prev_embedded = self.projector.batch_project(i, prev_data)
-                margin_tmp = 0.2*np.ones(len(prev_embedded))
-            
-            # margin_tmp = np.clip(margin_tmp, a_min=1, a_max=margin_tmp.max())
+                prev_data, prev_embedded, margin_tmp = self._construct_single_memory(curr, i)
 
             if read_memory_data is None:
                 read_memory_data = np.copy(prev_data)
@@ -1286,7 +1294,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
     def construct(self, next_iter):
         # construct working memory
         prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)
-        # prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 5)
+        prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 4)
         
         next_data = self.data_provider.train_representation(next_iter)
         selected = self.sampler.sampling(next_data)

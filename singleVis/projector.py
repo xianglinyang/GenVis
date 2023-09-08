@@ -197,6 +197,7 @@ class DVIProjector(Projector):
     def __init__(self, vis_model, content_path, vis_model_name, epoch_name, device, verbose=0) -> None:
         super().__init__(vis_model, content_path, vis_model_name, device)
         self.epoch_name = epoch_name
+        self.verbose = verbose
 
     def load(self, iteration):
         file_path = os.path.join(self.content_path, "Model", "{}_{}".format(self.epoch_name, iteration), "{}.pth".format(self.vis_model_name))

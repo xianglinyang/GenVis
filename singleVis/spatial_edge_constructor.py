@@ -1291,10 +1291,12 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 margins = np.concatenate((margins, margin_tmp), axis=0)
         return read_memory_data, read_memory_embedded, margins
         
-    def construct(self, next_iter):
-        # construct working memory
-        prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)
-        prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 4)
+    def construct(self, next_iter, estimated=False):
+        if estimated:
+            prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 4)
+        else:
+            # construct working memory
+            prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)
         
         next_data = self.data_provider.train_representation(next_iter)
         selected = self.sampler.sampling(next_data)

@@ -43,6 +43,7 @@ parser = argparse.ArgumentParser(description='Process hyperparameters...')
 parser.add_argument('--content_path', '-c', type=str)
 parser.add_argument('--setting', '-s', type=str)
 parser.add_argument('--resume', '-r', type=int, default=0)
+parser.add_argument('--estimated', '-e', type=int)
 args = parser.parse_args()
 
 ########################################################################################################################
@@ -51,6 +52,7 @@ args = parser.parse_args()
 CONTENT_PATH = args.content_path
 comment = args.setting
 RESUME = args.resume
+ESTIMATED = args.estimated
 
 sys.path.append(CONTENT_PATH)
 with open(os.path.join(CONTENT_PATH, "config.json"), "r") as f:
@@ -125,7 +127,7 @@ temporal_loss_fn = TemporalEdgeLoss(negative_sample_rate, _a, _b, repulsion_stre
 single_loss_fn = SingleVisLoss(umap_loss_fn, recon_loss_fn, lambd=LAMBDA)
 
 # Define Projector
-projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, epoch_name=EPOCH_NAME, device=DEVICE)
+projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, epoch_name=EPOCH_NAME, device=DEVICE, verbose=0)
 
 # Define Visualizer
 vis = visualizer(data_provider, projector, 200, "tab10")
@@ -174,7 +176,7 @@ for iteration in range(RESUME+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD
     sampler = RandomSampling(0.4)
     spatial_cons = SplitSpatialTemporalEdgeConstructor(data_provider, projector, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
     t0 = time.time()
-    spatial_component, temporal_component = spatial_cons.construct(iteration)
+    spatial_component, temporal_component = spatial_cons.construct(iteration, ESTIMATED)
     edge_to, edge_from, weights, feature_vectors, attention = spatial_component
     edge_t_to, edge_t_from, weight_t, next_data, prev_data, prev_embedded, margins = temporal_component
     t1 = time.time()

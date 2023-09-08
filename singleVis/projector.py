@@ -194,7 +194,7 @@ class EvalProjector(DeepDebuggerProjector):
         
 
 class DVIProjector(Projector):
-    def __init__(self, vis_model, content_path, vis_model_name, epoch_name, device) -> None:
+    def __init__(self, vis_model, content_path, vis_model_name, epoch_name, device, verbose=0) -> None:
         super().__init__(vis_model, content_path, vis_model_name, device)
         self.epoch_name = epoch_name
 
@@ -205,7 +205,8 @@ class DVIProjector(Projector):
         self.vis_model.load_state_dict(save_model["state_dict"])
         self.vis_model.to(self.DEVICE)
         self.vis_model.eval()
-        print("Successfully load the DVI visualization model for iteration {}".format(iteration))
+        if self.verbose>0:
+            print("Successfully load the DVI visualization model for iteration {}".format(iteration))
 
 
 class TimeVisProjector(Projector):

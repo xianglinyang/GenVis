@@ -881,12 +881,12 @@ class Evaluator(EvaluatorAbstractClass):
         if epoch_key not in evaluation["nn_test"]:
             evaluation["nn_test"][epoch_key] = dict()
         evaluation["nn_test"][epoch_key][n_key] = self.eval_nn_test(n_epoch, n_neighbors)
-        if epoch_key not in evaluation["b_train"]:
-            evaluation["b_train"][epoch_key] = dict()
-        evaluation["b_train"][epoch_key][n_key] = self.eval_b_train(n_epoch, n_neighbors)
-        if epoch_key not in evaluation["b_test"]:
-            evaluation["b_test"][epoch_key] = dict()
-        evaluation["b_test"][epoch_key][n_key] = self.eval_b_test(n_epoch, n_neighbors)
+        # if epoch_key not in evaluation["b_train"]:
+        #     evaluation["b_train"][epoch_key] = dict()
+        # evaluation["b_train"][epoch_key][n_key] = self.eval_b_train(n_epoch, n_neighbors)
+        # if epoch_key not in evaluation["b_test"]:
+        #     evaluation["b_test"][epoch_key] = dict()
+        # evaluation["b_test"][epoch_key][n_key] = self.eval_b_test(n_epoch, n_neighbors)
         evaluation["ppr_train"][epoch_key] = self.eval_inv_train(n_epoch)
         evaluation["ppr_test"][epoch_key] = self.eval_inv_test(n_epoch)
 

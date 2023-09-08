@@ -183,7 +183,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         """
         construct a temporal complex
         """
-        n_neighbors = 1
+        n_neighbors = 3
         
         # cosine distance
         high_neigh = NearestNeighbors(n_neighbors=n_neighbors, radius=0.4, metric="cosine")
@@ -1152,13 +1152,16 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         for i in working_epochs:
             # load train data and border centers
             prev_data = self.data_provider.train_representation(i)
+            # count dist
+            dist = self._uncertainty_measure(i, curr)
             # TODO how much prev data used
-            selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
+            selected = np.random.choice(len(prev_data), int(0.1*len(prev_data)), replace=False)
             prev_data = prev_data[selected]
 
             # use prediction as estimation
             prev_embedded = self.projector.batch_project(i, prev_data)
-            margin_tmp = np.ones(len(prev_embedded))
+            xy_range = np.ptp(prev_embedded, axis=0)
+            margin_tmp = dist*np.linalg.norm(xy_range)* np.ones(len(prev_embedded))
             
             if read_memory_data is None:
                 read_memory_data = np.copy(prev_data)
@@ -1214,18 +1217,24 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
     def _uncertainty_measure(self, prev_e, next_e):
         prev_data = self.data_provider.train_representation(prev_e)
         next_data = self.data_provider.train_representation(next_e)
+
         mean_t = prev_data.mean(axis=0)
         std_t = prev_data.std(axis=0)
         mean_tk = next_data.mean(axis=0)
         std_tk = next_data.std(axis=0)
 
-        # Assuming variables are uncorrelated, create diagonal covariance matrices
-        covariance_matrix_t = np.diag(std_t**2)
-        covariance_matrix_t_plus_k = np.diag(std_tk**2)
+        z_score = np.abs(mean_tk - mean_t) / np.sqrt(std_t ** 2 + std_tk ** 2)
+        margin = np.mean(z_score)
 
-        # Calculate the Mahalanobis distance
-        margins = distance.mahalanobis(mean_t, mean_tk, np.linalg.inv(covariance_matrix_t))
-        return margins
+        # margin = np.mean(np.sqrt((mean_tk - mean_t)**2 / std_t + (std_tk - std_t)**2 / std_t))
+
+        # # Assuming variables are uncorrelated, create diagonal covariance matrices
+        # covariance_matrix_t = np.diag(std_t**2)
+        # covariance_matrix_t_plus_k = np.diag(std_tk**2)
+
+        # # Calculate the Mahalanobis distance
+        # margin = distance.mahalanobis(mean_t, mean_tk, np.linalg.inv(covariance_matrix_t))
+        return margin
 
     def _construct_working_memory_estimation(self, curr, missing_window):
         # construct working history
@@ -1246,7 +1255,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             # load train data and border centers
             prev_data = self.data_provider.train_representation(i)
             # TODO how much prev data used
-            selected = np.random.choice(len(prev_data), int(0.01*len(prev_data)), replace=False)
+            selected = np.random.choice(len(prev_data), int(0.1*len(prev_data)), replace=False)
             prev_data = prev_data[selected]
 
             # use prediction as estimation
@@ -1257,12 +1266,12 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 else:
                     pseudo_epoch = curr- (missing_window+1)*self.data_provider.p
                     prev_embedded = self.projector.batch_project(pseudo_epoch, prev_data)
-                    margin_tmp = self._uncertainty_measure(pseudo_epoch, curr) * np.ones(len(prev_embedded))
+                    margin_tmp = (0.2+self._uncertainty_measure(pseudo_epoch, curr)) * np.ones(len(prev_embedded))
             else:
                 prev_embedded = self.projector.batch_project(i, prev_data)
-                margin_tmp = 0.5*np.ones(len(prev_embedded))
+                margin_tmp = 0.2*np.ones(len(prev_embedded))
             
-            margin_tmp = np.clip(margin_tmp, a_min=0.5, a_max=margin_tmp.max())
+            # margin_tmp = np.clip(margin_tmp, a_min=1, a_max=margin_tmp.max())
 
             if read_memory_data is None:
                 read_memory_data = np.copy(prev_data)
@@ -1276,8 +1285,8 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         
     def construct(self, next_iter):
         # construct working memory
-        # prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)
-        prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 4)
+        prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)
+        # prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 5)
         
         next_data = self.data_provider.train_representation(next_iter)
         selected = self.sampler.sampling(next_data)

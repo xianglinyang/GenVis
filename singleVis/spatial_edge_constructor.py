@@ -1244,7 +1244,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         mean_tk = next_data.mean(axis=0)
         std_tk = next_data.std(axis=0)
 
-        z_score = np.abs(mean_tk - mean_t) / np.sqrt(std_t ** 2 + std_tk ** 2)
+        z_score = np.abs(mean_tk - mean_t) / (np.sqrt(std_t ** 2 + std_tk ** 2)+5E-4)
         margin = np.mean(z_score)
         return margin
 

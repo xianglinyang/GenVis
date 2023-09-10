@@ -14,8 +14,7 @@ from torch.utils.data import WeightedRandomSampler
 from umap.umap_ import find_ab_params
 
 from singleVis.custom_weighted_random_sampler import CustomWeightedRandomSampler
-# from singleVis.SingleVisualizationModel import VisModel
-from singleVis.vis_models import ContinualNormAE
+from singleVis.vis_models import vis_models
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss, LocalTemporalLoss, SmoothnessLoss
 from singleVis.edge_dataset import DVIDataHandler, LocalTemporalDataHandler
 from singleVis.trainer import DVITrainer, SingleVisTrainer, LocalTemporalTrainer
@@ -60,6 +59,7 @@ LEN = TRAINING_PARAMETER["train_num"]
 
 # Training parameter (visualization model)
 VISUALIZATION_PARAMETER = config["VISUALIZATION"]
+VIS_MODEL = VISUALIZATION_PARAMETER["VIS_MODEL"]
 LAMBDA1 = VISUALIZATION_PARAMETER["LAMBDA1"]
 B_N_EPOCHS = VISUALIZATION_PARAMETER["BOUNDARY"]["B_N_EPOCHS"]
 L_BOUND = VISUALIZATION_PARAMETER["BOUNDARY"]["L_BOUND"]
@@ -74,6 +74,10 @@ MAX_EPOCH = VISUALIZATION_PARAMETER["MAX_EPOCH"]
 VIS_MODEL_NAME = VISUALIZATION_PARAMETER["VIS_MODEL_NAME"]
 EVALUATION_NAME = VISUALIZATION_PARAMETER["EVALUATION_NAME"]
 
+VIS_MODEL = 'baseAE'
+VIS_MODEL_NAME = f"{VIS_METHOD}_{VIS_MODEL}"
+EVALUATION_NAME = f"evaluation_{VIS_MODEL_NAME}"
+
 # Define hyperparameters
 DEVICE = torch.device("cuda:{}".format(GPU_ID) if torch.cuda.is_available() else "cpu")
 
@@ -86,7 +90,7 @@ net = eval("subject_model.{}()".format(NET))
 # Define data_provider
 data_provider = NormalDataProvider(CONTENT_PATH, net, EPOCH_START, EPOCH_END, EPOCH_PERIOD, device=DEVICE, classes=CLASSES, epoch_name=EPOCH_NAME, verbose=1)
 # Define visualization models
-model = ContinualNormAE(ENCODER_DIMS, DECODER_DIMS)
+model = vis_models[VIS_MODEL](ENCODER_DIMS, DECODER_DIMS)
 
 # Define Projector
 projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, vis_model_name=VIS_MODEL_NAME, epoch_name=EPOCH_NAME, device=DEVICE)
@@ -99,5 +103,4 @@ evaluator = Evaluator(data_provider, projector, metric="euclidean")
 
 # save_dir = os.path.join(data_provider.content_path, "img")
 # vis.savefig(EPOCH_START, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, EPOCH_START, VIS_METHOD)))
-evaluator.save_epoch_eval(EPOCH_END, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
-
+evaluator.save_epoch_eval(10, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))

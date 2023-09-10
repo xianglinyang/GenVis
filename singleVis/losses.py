@@ -97,7 +97,6 @@ class SingleVisLoss(nn.Module):
         recon_to, recon_from = outputs["recon"]
 
         recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from, a_to, a_from)
-        # recon_l = self.recon_loss(edge_to, edge_from, recon_to, recon_from)
         umap_l = self.umap_loss(embedding_to, embedding_from)
 
         loss = umap_l + self.lambd * recon_l
@@ -190,7 +189,13 @@ class TemporalEdgeLoss(nn.Module):
         self._repulsion_strength = repulsion_strength
 
     def forward(self, embedding_to, embedding_from, embedded_from_reference, margin):
-        # strategy 1
+        '''
+        2 strategies:
+        1. optimize umap loss directly on reference
+        2. optimize umap loss on embedding_from and force embedding_from to be the same as reference
+
+        currently using strategy 2
+        '''
         # embedding_from does not have gradient
         assert embedded_from_reference.requires_grad == False
         batch_size = embedding_to.shape[0]
@@ -217,6 +222,10 @@ class TemporalEdgeLoss(nn.Module):
         probabilities_graph = torch.zeros_like(probabilities_distance)
         probabilities_graph[:batch_size] = 1
 
+        # # set margin weights
+        # weights = torch.ones_like(probabilities_distance)
+        # weights[:batch_size] = margin
+
         # compute cross entropy
         (_, _, ce_loss) = compute_cross_entropy(
             probabilities_graph,
@@ -225,45 +234,9 @@ class TemporalEdgeLoss(nn.Module):
         )
 
         loss1 = torch.mean(ce_loss)
-        # TODO margin to be uncertainty
+        # loss1 = torch.mean(ce_loss*weights)
         loss2 = torch.mean(torch.clamp(torch.norm(embedded_from_reference-embedding_from, dim=1)-margin, min=0))
         return loss1+loss2
-        ##################################################
-        # strategy 2
-        # embedding_from does not have gradient
-        # assert embedded_from_reference.requires_grad == False
-        # batch_size = embedding_to.shape[0]
-        # if batch_size == 0:
-        #     return torch.tensor(0).to(dtype=torch.float32)
-        # # get negative samples
-        # embedding_neg_to = torch.repeat_interleave(embedding_to, self._negative_sample_rate, dim=0)
-        # repeat_neg = torch.repeat_interleave(embedded_from_reference, self._negative_sample_rate, dim=0)
-        # randperm = torch.randperm(batch_size*self._negative_sample_rate)
-        # embedding_neg_from = repeat_neg[randperm]
-
-        # distance_embedding = torch.cat(
-        #     (
-        #         torch.norm(embedding_to - embedded_from_reference, dim=1),
-        #         torch.norm(embedding_neg_to - embedding_neg_from, dim=1),
-        #     ),
-        #     dim=0,
-        # )
-        # probabilities_distance = convert_distance_to_probability(
-        #     distance_embedding, self.a, self.b
-        # )
-
-        # # set true probabilities based on negative sampling
-        # probabilities_graph = torch.zeros_like(probabilities_distance)
-        # probabilities_graph[:batch_size] = 1
-
-        # # compute cross entropy
-        # (_, _, ce_loss) = compute_cross_entropy(
-        #     probabilities_graph,
-        #     probabilities_distance,
-        #     repulsion_strength=self._repulsion_strength,
-        # )
-
-        # return torch.mean(ce_loss)
 
 '''
 two strategies:

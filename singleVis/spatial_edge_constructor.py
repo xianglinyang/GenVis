@@ -183,7 +183,7 @@ class SpatialEdgeConstructor(SpatialEdgeConstructorAbstractClass):
         """
         construct a temporal complex
         """
-        n_neighbors = 3
+        n_neighbors = 5
         
         # cosine distance
         high_neigh = NearestNeighbors(n_neighbors=n_neighbors, radius=0.4, metric="cosine")
@@ -1147,11 +1147,12 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
 
         # use prediction as estimation
         prev_embedded = self.projector.batch_project(prev, prev_data)
-        xy_range = np.ptp(prev_embedded, axis=0)
+        # xy_range = np.ptp(prev_embedded, axis=0)
 
         # TODO clip margin?
-        dist = np.clip(dist, a_min=0, a_max=0.1)
-        margin = dist*np.linalg.norm(xy_range)* np.ones(len(prev_embedded))
+        # dist = np.clip(dist, a_min=0, a_max=0.1)
+        margin = dist * np.ones(len(prev_embedded))
+        margin = np.clip(margin, a_min=0.1, a_max=1.0)
         return prev_data, prev_embedded, margin
     
     def _construct_single_memory_estimation(self, curr, prev, pseudo_epoch):
@@ -1166,12 +1167,13 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
 
         # use prediction as estimation
         prev_embedded = self.projector.batch_project(pseudo_epoch, prev_data)
-        xy_range = np.ptp(prev_embedded, axis=0)
+        # xy_range = np.ptp(prev_embedded, axis=0)
 
         # TODO clip margin?
-        dist = np.clip(dist, a_min=0, a_max=0.1)
+        # dist = np.clip(dist, a_min=0, a_max=0.1)
         # set to be two times bigger than sequence
-        margin = 2*dist*np.linalg.norm(xy_range)* np.ones(len(prev_embedded))
+        margin = dist* np.ones(len(prev_embedded))
+        margin = 2*np.clip(margin, a_min=0.1, a_max=1.0)
         return prev_data, prev_embedded, margin
 
     def _construct_working_memory(self, curr):
@@ -1244,15 +1246,6 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
 
         z_score = np.abs(mean_tk - mean_t) / np.sqrt(std_t ** 2 + std_tk ** 2)
         margin = np.mean(z_score)
-
-        # margin = np.mean(np.sqrt((mean_tk - mean_t)**2 / std_t + (std_tk - std_t)**2 / std_t))
-
-        # # Assuming variables are uncorrelated, create diagonal covariance matrices
-        # covariance_matrix_t = np.diag(std_t**2)
-        # covariance_matrix_t_plus_k = np.diag(std_tk**2)
-
-        # # Calculate the Mahalanobis distance
-        # margin = distance.mahalanobis(mean_t, mean_tk, np.linalg.inv(covariance_matrix_t))
         return margin
 
     def _construct_working_memory_estimation(self, curr, missing_window):
@@ -1273,10 +1266,12 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
 
         for i in working_epochs:
             # use prediction as estimation
-            if i >= (curr- missing_window*self.data_provider.p):
+            if i < self.data_provider.s + missing_window*self.data_provider.p:
+                prev_data, prev_embedded, margin_tmp = self._construct_single_memory(curr, i)
+            elif i > (curr- (missing_window+1)*self.data_provider.p):
+                curr_available_epoch = self.data_provider.s + (missing_window-1) * self.data_provider.p
                 pseudo_epoch = curr- (missing_window+1)*self.data_provider.p
-                if pseudo_epoch < self.data_provider.s:
-                    pseudo_epoch = self.data_provider.s
+                pseudo_epoch = max(pseudo_epoch, curr_available_epoch)
                 prev_data, prev_embedded, margin_tmp = self._construct_single_memory_estimation(curr, i, pseudo_epoch)
             else:
                 prev_data, prev_embedded, margin_tmp = self._construct_single_memory(curr, i)

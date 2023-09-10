@@ -405,6 +405,7 @@ class SplitTemporalTrainer(SingleVisTrainer):
         super().__init__(model, criterion, optimizer, lr_scheduler, spatial_edge_loader, DEVICE)
         self.temporal_edge_loader = temporal_edge_loader
         self._loss['temporal']=list()
+        # self._loss['temporal_recon']=list()
 
     def update_edge_loader(self, spatial_edge_loader, temporal_edge_loader):
         del self.spatial_edge_loader
@@ -420,6 +421,7 @@ class SplitTemporalTrainer(SingleVisTrainer):
         umap_losses = []
         recon_losses = []
         temporal_losses = []
+        # temporal_recon_losses = []
         # iterate the shorter one until we iterate through longest one 
         if len(self.edge_loader)>len(self.temporal_edge_loader):
             t = tqdm(zip(self.edge_loader, itertools.cycle(self.temporal_edge_loader)), total=len(self.edge_loader), leave=True)
@@ -448,12 +450,14 @@ class SplitTemporalTrainer(SingleVisTrainer):
             outputs["umap"] = (embedding_to, embedding_from)
             outputs["recon"] = (recon_to, recon_from)
             outputs['temporal'] = (embedding_t_to, embedding_t_from)
+            # outputs['temporal_recon'] = (edge_t_to, edge_t_from, recon_t_to, recon_t_from)
             
             umap_l, recon_l, temporal_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, embedded_from, margins, outputs)
             all_loss.append(loss.item())
             umap_losses.append(umap_l.item())
             recon_losses.append(recon_l.item())
             temporal_losses.append(temporal_l.item())
+            # temporal_recon_losses.append(t_recon_l.item())
             # ===================backward====================
             self.optimizer.zero_grad()
             loss.backward()
@@ -463,6 +467,7 @@ class SplitTemporalTrainer(SingleVisTrainer):
         self._loss['umap'].append(sum(umap_losses) / len(umap_losses))
         self._loss['recon'].append(sum(recon_losses) / len(recon_losses))
         self._loss['temporal'].append(sum(temporal_losses) / len(temporal_losses))
+        # self._loss['temporal_recon'].append(sum(temporal_recon_losses) / len(temporal_recon_losses))
         self.model.eval()
         if verbose:
             message = (f"umap:{self._loss['umap'][-1]:.4f}\trecon:{self._loss['recon'][-1]:.4f}\ttemporal:{self._loss['temporal'][-1]:.4f}\tloss:{self._loss['loss'][-1]:.4f}")

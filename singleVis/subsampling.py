@@ -14,7 +14,9 @@ papers:
 '''
 from abc import ABC, abstractmethod
 
-from jenkspy import JenksNaturalBreaks
+from sklearn.neighbors import NearestNeighbors
+
+# from jenkspy import JenksNaturalBreaks
 import numpy as np
 from scipy.special import softmax
 
@@ -54,10 +56,34 @@ class DensityAwareSampling(SubSampling):
     '''Dynamically choose a ratio such that the changing density is minimized'''
     def __init__(self) -> None:
         super().__init__()
-
-    def sampling(self):
-        pass
-
+    
+    def density_estimation(self, data, estimated_ratio=0.5, repeat=2, k=20, metric="euclidean"):
+        avg_dists = np.zeros(repeat)
+        for r in range(repeat):
+            sampling_idxs = np.random.choice(len(data), size=int(len(data)*estimated_ratio), replace=False)
+            high_neigh = NearestNeighbors(n_neighbors=k, metric=metric)
+            high_neigh.fit(data)
+            knn_dists, _ = high_neigh.kneighbors(data[sampling_idxs], n_neighbors=k, return_distance=True)
+            avg_dists[r] = knn_dists[:, -1].mean()
+        return avg_dists.mean()
+    
+    def sampling(self, data, threshold=0.25):
+        avg_dist = self.density_estimation(data, estimated_ratio=0.01, repeat=5)
+        ratios = np.array([0.1, 0.2, 0.3, 0.4, 0.5])
+        densities = list()
+        for ratio in ratios:
+            subsampling_idxs = np.random.choice(len(data), int(ratio*len(data)), replace=False)
+            estimated_avg_distance = self.density_estimation(data[subsampling_idxs], estimated_ratio=0.25)
+            densities.append(avg_dist/estimated_avg_distance)
+        densities = np.array(densities)
+        dx = (densities-1)/(ratios-1)
+        target_ratio = ratios[-1]
+        for i in range(len(dx)):
+            if dx[i]<=threshold:
+                target_ratio = ratios[i]
+                return np.random.choice(len(data), int(target_ratio*len(data)), replace=False)
+        return np.random.choice(len(data), int(target_ratio*len(data)), replace=False)
+        
 
 class CoresetSampling(SubSampling):
     def __init__(self, ratio, metric) -> None:

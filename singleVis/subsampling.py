@@ -34,28 +34,38 @@ class SubSampling(ABC):
 
 
 class IdentitySampling(SubSampling):
-    def __init__(self) -> None:
+    def __init__(self, verbose=1) -> None:
         super().__init__()
+        self.name = "Identity"
+        self.verbose = verbose
     
     def sampling(self, data):
+        if verbose:
+            print("Sampling 100% data points")
         return np.arange(len(data))
 
 
 class RandomSampling(SubSampling):
-    def __init__(self, ratio) -> None:
+    def __init__(self, ratio, verbose=1) -> None:
         super().__init__()
         self.ratio = ratio
+        self.name = "Random"
+        self.verbose = verbose
     
     def sampling(self, data):
         num = len(data)
         selected_idxs = np.random.choice(num, int(self.ratio*num), replace=False)
+        if verbose:
+            print(f"Sampling {self.ratio*100}% data points")
         return selected_idxs
     
 
 class DensityAwareSampling(SubSampling):
     '''Dynamically choose a ratio such that the changing density is minimized'''
-    def __init__(self) -> None:
+    def __init__(self, verbose=1) -> None:
         super().__init__()
+        self.name = "DensityAware"
+        self.verbose = verbose
     
     def density_estimation(self, data, estimated_ratio=0.5, repeat=2, k=20, metric="euclidean"):
         avg_dists = np.zeros(repeat)
@@ -81,15 +91,21 @@ class DensityAwareSampling(SubSampling):
         for i in range(len(dx)):
             if dx[i]<=threshold:
                 target_ratio = ratios[i]
+                if verbose:
+                    print(f"Sampling {target_ratio*len(data)}% data points")
                 return np.random.choice(len(data), int(target_ratio*len(data)), replace=False)
+        if verbose:
+            print(f"Sampling {target_ratio*len(data)*100}% data points")
         return np.random.choice(len(data), int(target_ratio*len(data)), replace=False)
         
 
 class CoresetSampling(SubSampling):
-    def __init__(self, ratio, metric) -> None:
+    def __init__(self, ratio, metric, verbose=1) -> None:
         super().__init__()
         self.ratio = ratio
         self.metric = metric
+        self.name = "Coreset"
+        self.verbose = verbose
 
     def sampling(self, data):
         target_num = int(len(data)*self.ratio)
@@ -97,6 +113,8 @@ class CoresetSampling(SubSampling):
         random_init_idxs = np.random.choice(len(data), size=100, replace=False)
         kc = kCenterGreedy(data, metric=self.metric)
         _ = kc.select_batch_with_budgets(random_init_idxs, target_num-100)
+        if verbose:
+            print(f"Sampling {len(kc.already_selected)/len(data)*100}% data points")
         return kc.already_selected
 
 

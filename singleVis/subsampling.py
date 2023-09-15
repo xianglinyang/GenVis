@@ -91,11 +91,11 @@ class DensityAwareSampling(SubSampling):
         for i in range(len(dx)):
             if dx[i]<=threshold:
                 target_ratio = ratios[i]
-                if verbose:
-                    print(f"Sampling {target_ratio*len(data)}% data points")
+                if self.verbose:
+                    print(f"Sampling {target_ratio*100}% data points")
                 return np.random.choice(len(data), int(target_ratio*len(data)), replace=False)
-        if verbose:
-            print(f"Sampling {target_ratio*len(data)*100}% data points")
+        if self.verbose:
+            print(f"Sampling {target_ratio*100}% data points")
         return np.random.choice(len(data), int(target_ratio*len(data)), replace=False)
         
 

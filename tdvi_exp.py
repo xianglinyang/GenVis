@@ -13,7 +13,7 @@ from singleVis.vis_models import vis_models as vmodels
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss, TemporalEdgeLoss, splittDVILoss
 from singleVis.edge_dataset import DataHandler, DVIDataHandler, SplitTemporalDataHandler, create_dataloader
 from singleVis.trainer import SingleVisTrainer, SplitTemporalTrainer
-from singleVis.subsampling import RandomSampling
+from singleVis.subsampling import DensityAwareSampling
 from singleVis.data import NormalDataProvider
 from singleVis.spatial_edge_constructor import SplitSpatialTemporalEdgeConstructor, SingleEpochSpatialEdgeConstructor
 from singleVis.projector import DVIProjector
@@ -64,6 +64,7 @@ CLASSES = config["CLASSES"]
 DATASET = config["DATASET"]
 PREPROCESS = config["VISUALIZATION"]["PREPROCESS"]
 GPU_ID = config["GPU"]
+GPU_ID = "1"
 EPOCH_START = config["EPOCH_START"]
 EPOCH_END = config["EPOCH_END"]
 EPOCH_PERIOD = config["EPOCH_PERIOD"]
@@ -143,7 +144,7 @@ if RESUME < EPOCH_START:
 # Define Edge dataset
     t0 = time.time()
 
-    sampler = RandomSampling(0.4)
+    sampler = DensityAwareSampling()
     spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, EPOCH_START, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
     edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
 
@@ -173,7 +174,7 @@ for iteration in range(RESUME+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
     
     # Define Edge dataset
-    sampler = RandomSampling(0.4)
+    sampler = DensityAwareSampling()
     spatial_cons = SplitSpatialTemporalEdgeConstructor(data_provider, projector, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
     t0 = time.time()
     spatial_component, temporal_component = spatial_cons.construct(iteration, ESTIMATED)

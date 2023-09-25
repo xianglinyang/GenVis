@@ -40,7 +40,7 @@ class IdentitySampling(SubSampling):
         self.verbose = verbose
     
     def sampling(self, data):
-        if verbose:
+        if self.verbose:
             print("Sampling 100% data points")
         return np.arange(len(data))
 

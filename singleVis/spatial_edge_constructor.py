@@ -1134,6 +1134,18 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
     3. estimate by nearest visualizer
     '''
     # TODO: move this class to temporal edge construction
+    def _uncertainty_measure(self, prev_e, next_e):
+        prev_data = self.data_provider.train_representation(prev_e)
+        next_data = self.data_provider.train_representation(next_e)
+
+        mean_t = prev_data.mean(axis=0)
+        std_t = prev_data.std(axis=0)
+        mean_tk = next_data.mean(axis=0)
+        std_tk = next_data.std(axis=0)
+
+        z_score = np.abs(mean_tk - mean_t) / (np.sqrt(std_t ** 2 + std_tk ** 2)+5E-4)
+        margin = np.mean(z_score)
+        return margin
 
     def _construct_single_memory(self, curr, prev):
         # load train data and border centers
@@ -1234,19 +1246,6 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
                 margins = np.concatenate((margins, margin_tmp), axis=0)
         return read_memory_data, read_memory_embedded, margins
-    
-    def _uncertainty_measure(self, prev_e, next_e):
-        prev_data = self.data_provider.train_representation(prev_e)
-        next_data = self.data_provider.train_representation(next_e)
-
-        mean_t = prev_data.mean(axis=0)
-        std_t = prev_data.std(axis=0)
-        mean_tk = next_data.mean(axis=0)
-        std_tk = next_data.std(axis=0)
-
-        z_score = np.abs(mean_tk - mean_t) / (np.sqrt(std_t ** 2 + std_tk ** 2)+5E-4)
-        margin = np.mean(z_score)
-        return margin
 
     def _construct_working_memory_estimation(self, curr, missing_window):
         # construct working history
@@ -1266,11 +1265,13 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
 
         for i in working_epochs:
             # use prediction as estimation
-            if i < self.data_provider.s + missing_window*self.data_provider.p:
+            if i <= self.data_provider.s + missing_window*self.data_provider.p:
                 prev_data, prev_embedded, margin_tmp = self._construct_single_memory(curr, i)
             elif i > (curr- (missing_window+1)*self.data_provider.p):
                 curr_available_epoch = self.data_provider.s + (missing_window-1) * self.data_provider.p
                 pseudo_epoch = curr- (missing_window+1)*self.data_provider.p
+                # use init ones as pseudo epoch
+                # pseudo_epoch = i - (missing_window+1)*self.data_provider.p
                 pseudo_epoch = max(pseudo_epoch, curr_available_epoch)
                 prev_data, prev_embedded, margin_tmp = self._construct_single_memory_estimation(curr, i, pseudo_epoch)
             else:
@@ -1288,7 +1289,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         
     def construct(self, next_iter, estimated=False):
         if estimated:
-            prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 4)
+            prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 3)
         else:
             # construct working memory
             prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)

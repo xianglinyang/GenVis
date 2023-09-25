@@ -11,6 +11,7 @@ A class to record training dynamics, including:
 """
 import numpy as np
 import umap
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 
 def softmax(x):
@@ -24,14 +25,16 @@ def cross_entropy(data, y):
 
 
 class TD:
-    def __init__(self, data_provider, projector) -> None:
+    def __init__(self, data_provider, projector, range=None) -> None:
         self.data_provider = data_provider
         self.projector = projector
-    
-    def loss_dynamics(self, ):
-        EPOCH_START = self.data_provider.s
-        EPOCH_END = self.data_provider.e
-        EPOCH_PERIOD = self.data_provider.p
+        if range is None:
+            self.range = (self.data_provider.s, self.data_provider.e, self.data_provider.p)
+        else:
+            self.range = range
+
+    def loss_dynamics(self):
+        EPOCH_START, EPOCH_END, EPOCH_PERIOD = self.range
         labels = self.data_provider.train_labels(EPOCH_START)
 
         # epoch, num, 1
@@ -51,9 +54,7 @@ class TD:
         return losses
     
     def uncertainty_dynamics(self):
-        EPOCH_START = self.data_provider.s
-        EPOCH_END = self.data_provider.e
-        EPOCH_PERIOD = self.data_provider.p
+        EPOCH_START, EPOCH_END, EPOCH_PERIOD = self.range
         labels = self.data_provider.train_labels(EPOCH_START)
 
         # epoch, num, 1
@@ -72,10 +73,7 @@ class TD:
         return uncertainties
     
     def pred_dynamics(self):
-        EPOCH_START = self.data_provider.s
-        EPOCH_END = self.data_provider.e
-        EPOCH_PERIOD = self.data_provider.p
-
+        EPOCH_START, EPOCH_END, EPOCH_PERIOD = self.range
         # epoch, num, 1
         preds = None
 
@@ -87,16 +85,14 @@ class TD:
                 preds = np.expand_dims(pred, axis=0)
             else:
                 preds = np.concatenate((preds, np.expand_dims(pred, axis=0)), axis=0)
-        preds = np.transpose(preds, [1,0, 2])
+        preds = np.transpose(preds, [1,0,2])
         return preds
     
     def dloss_dt_dynamics(self, ):
         return
     
     def position_dynamics(self):
-        EPOCH_START = self.data_provider.s
-        EPOCH_END = self.data_provider.e
-        EPOCH_PERIOD = self.data_provider.p
+        EPOCH_START, EPOCH_END, EPOCH_PERIOD = self.range
 
         # epoch, num, dims
         embeddings = None
@@ -111,31 +107,88 @@ class TD:
         embeddings = np.transpose(embeddings, [1,0,2])
         return embeddings
     
+    def position_high_dynamics(self):
+        EPOCH_START, EPOCH_END, EPOCH_PERIOD = self.range
+        # epoch, num, dims
+        representations = None
+
+        for epoch in range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD):
+            representation = self.data_provider.train_representation(epoch)
+            if representations is None:
+                representations = np.expand_dims(representation, axis=0)
+            else:
+                representations = np.concatenate((representations, np.expand_dims(representation, axis=0)), axis=0)
+        representations = np.transpose(representations, [1,0,2])
+        return representations
+    
     def velocity_dynamics(self,):
         position_dynamics = self.position_dynamics()
+        return position_dynamics[:, 1:, :] - position_dynamics[:, :-1, :]
+    
+    def velocity_high_dynamics(self,):
+        position_dynamics = self.position_high_dynamics()
         return position_dynamics[:, 1:, :] - position_dynamics[:, :-1, :]
 
     def acceleration_dynamics(self, ):
         velocity_dynamics = self.velocity_dynamics()
         return velocity_dynamics[:, 1:, :] - velocity_dynamics[:, :-1, :]
     
-    def show_ground_truth(self, trajectories, noise_idxs, save_path=None):
-        
-        num = len(trajectories)
-        trajectories = trajectories.reshape(num, -1)
+    def acceleration_high_dynamics(self, ):
+        velocity_dynamics = self.velocity_high_dynamics()
+        return velocity_dynamics[:, 1:, :] - velocity_dynamics[:, :-1, :]
+    
+    def simplify(self, trajectories, method):
+        '''Choose from
+        1. PCA
+        2. UMAP
+        3. interpretable method
+        '''
+        if method == "UMAP":
+            num = len(trajectories)
+            trajectories = trajectories.reshape(num, -1)
+            # Non-linear
+            reducer = umap.UMAP(n_components=2)
+            embeddings = reducer.fit_transform(trajectories)
+        elif method=="PCA":
+            num = len(trajectories)
+            trajectories = trajectories.reshape(num, -1)
+            # Linear
+            reducer = PCA(n_components=2)
+            embeddings = reducer.fit_transform(trajectories)
+        elif method == "length":
+            # trajectories = trajectories.reshape(len(trajectories), -1, 2)
+            movement = np.abs(trajectories[:, 1:, :] - trajectories[:, :-1, :])
+            # scalar
+            embeddings = np.linalg.norm(movement, axis=2).sum(axis=1)
+            # two dimension
+            # embeddings = movement.sum(axis=1).squeeze()
+        elif method == "avg_v":
+            # trajectories = trajectories.reshape(len(trajectories), -1, 2)
+            v = np.abs(trajectories[:, 1:, :] - trajectories[:, :-1, :])
+            # embeddings = v.mean(axis=1).squeeze()
+            embeddings = np.linalg.norm(v, axis=2).sum(axis=1)
+        elif method == "net_displacement":
+            # trajectories = trajectories.reshape(len(trajectories), -1, 2)
+            # 3. net displacement
+            dists = (trajectories[:, -1, :] - trajectories[:, 0, :]).squeeze()
+            embeddings = np.linalg.norm(dists, axis=1).squeeze()
+        elif method == "RoG":
+            # Radius of Gyration
+            mean_t = trajectories.mean(axis=0)
+            embeddings = np.linalg.norm(np.abs(trajectories-mean_t).mean(axis=1), axis=1)
+        else:
+            raise TypeError("No method Implemented!")
 
-        reducer = umap.UMAP()
-        embeddings = reducer.fit_transform(trajectories)
+        return embeddings
 
-        EPOCH_START = self.data_provider.s
-        labels = self.data_provider.train_labels(EPOCH_START)
-
+    def show_ground_truth(self, embeddings, noise_idxs, colors, save_path=None):
         plt.scatter(
             embeddings[:, 0],
             embeddings[:, 1],
             s=.3,
-            c=labels,
-            cmap="tab10")
+            c=colors,
+            cmap="tab10"
+            )
         
         plt.scatter(
             embeddings[:, 0][noise_idxs],
@@ -147,6 +200,29 @@ class TD:
             plt.show()
         else:
             plt.savefig(save_path)
+    
+    def show_ground_truth_all(self, trajectories, noise_idxs, method="UMAP", save_path=None):
+        embeddings = self.simplify(trajectories, method)
+
+        EPOCH_START = self.data_provider.s
+        labels = self.data_provider.train_labels(EPOCH_START)
+
+        self.show_ground_truth(embeddings, noise_idxs, labels, save_path)
+    
+    def show_ground_truth_cls(self, trajectories, noise_idxs, cls, method="UMAP", save_path=None):
+        EPOCH_START = self.data_provider.s
+        labels = self.data_provider.train_labels(EPOCH_START)
+
+        cls_idxs = np.argwhere(labels == cls).squeeze()
+        mask = np.isin(cls_idxs, noise_idxs)
+
+        target_trajectories =  trajectories[cls_idxs]
+
+        embedding1 = self.simplify(target_trajectories, "length")
+        embedding2 = self.simplify(target_trajectories, "RoG")
+        embeddings = np.vstack((embedding1, embedding2)).transpose([1,0])
+
+        self.show_ground_truth(embeddings, mask, colors=[0]*len(target_trajectories), save_path=save_path)
     
 
     

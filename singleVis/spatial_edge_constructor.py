@@ -1154,7 +1154,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         dist = self._uncertainty_measure(prev, curr)
 
         # TODO how much prev data used
-        selected = np.random.choice(len(prev_data), int(0.1*len(prev_data)), replace=False)
+        selected = np.random.choice(len(prev_data), int(0.05*len(prev_data)), replace=False)
         prev_data = prev_data[selected]
 
         # use prediction as estimation
@@ -1174,7 +1174,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
         dist = self._uncertainty_measure(prev, curr)
 
         # TODO how much prev data used
-        selected = np.random.choice(len(prev_data), int(0.1*len(prev_data)), replace=False)
+        selected = np.random.choice(len(prev_data), int(0.05*len(prev_data)), replace=False)
         prev_data = prev_data[selected]
 
         # use prediction as estimation

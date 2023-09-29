@@ -1199,6 +1199,9 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 working_epochs.append(prev)
             else:
                 break
+
+        # based epoch
+        based_epoch = curr - self.data_provider.p
         # working momery
         read_memory_data = None
         read_memory_embedded = None
@@ -1213,17 +1216,18 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 read_memory_data = np.concatenate((read_memory_data, prev_data), axis=0)
                 read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
                 margins = np.concatenate((margins, margin_tmp), axis=0)
-        return read_memory_data, read_memory_embedded, margins
+        return read_memory_data, read_memory_embedded, margins, based_epoch
     
     def _construct_working_memory_skip(self, curr, missing_window):
         # construct working history
         working_epochs = list()
         i = 0
         # if less than missing window, dont skip
-        if curr - missing_window < self.data_provider.s:
+        if curr - (missing_window+1) * self.data_provider.p < self.data_provider.s:
             skip = 0
         else:
             skip = missing_window
+        based_epoch = curr - self.data_provider.p * (skip+1)
         while True:
             prev = curr - (skip + pow(2, i)) * self.data_provider.p
             i = i+1
@@ -1245,7 +1249,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 read_memory_data = np.concatenate((read_memory_data, prev_data), axis=0)
                 read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
                 margins = np.concatenate((margins, margin_tmp), axis=0)
-        return read_memory_data, read_memory_embedded, margins
+        return read_memory_data, read_memory_embedded, margins, based_epoch
 
     def _construct_working_memory_estimation(self, curr, missing_window):
         # construct working history
@@ -1277,6 +1281,17 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             else:
                 prev_data, prev_embedded, margin_tmp = self._construct_single_memory(curr, i)
 
+        # based_epoch
+        based_epoch = working_epochs[0]
+        if based_epoch <= self.data_provider.s + missing_window*self.data_provider.p:
+            based_epoch = curr - self.data_provider.p
+        elif based_epoch > (curr- (missing_window+1)*self.data_provider.p):
+            curr_available_epoch = self.data_provider.s + (missing_window-1) * self.data_provider.p
+            pseudo_epoch = curr- (missing_window+1)*self.data_provider.p
+            based_epoch = max(pseudo_epoch, curr_available_epoch)
+        else:
+            based_epoch = curr - self.data_provider.p
+
             if read_memory_data is None:
                 read_memory_data = np.copy(prev_data)
                 read_memory_embedded = np.copy(prev_embedded)
@@ -1285,14 +1300,15 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
                 read_memory_data = np.concatenate((read_memory_data, prev_data), axis=0)
                 read_memory_embedded = np.concatenate((read_memory_embedded, prev_embedded), axis=0)
                 margins = np.concatenate((margins, margin_tmp), axis=0)
-        return read_memory_data, read_memory_embedded, margins
+        return read_memory_data, read_memory_embedded, margins, based_epoch
         
     def construct(self, next_iter, estimated=False):
         if estimated:
-            prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 3)
+            # prev_data, prev_embedded, margins = self._construct_working_memory_estimation(next_iter, 3)
+            prev_data, prev_embedded, margins, based_epoch = self._construct_working_memory_skip(next_iter, estimated)
         else:
             # construct working memory
-            prev_data, prev_embedded, margins = self._construct_working_memory(next_iter)
+            prev_data, prev_embedded, margins, based_epoch = self._construct_working_memory(next_iter)
         
         next_data = self.data_provider.train_representation(next_iter)
         selected = self.sampler.sampling(next_data)
@@ -1322,7 +1338,7 @@ class SplitSpatialTemporalEdgeConstructor(SpatialEdgeConstructor):
             raise Exception("Illegal border edges proposion!")
         
         # spatial component, temporal component
-        return (edge_to, edge_from, weight, feature_vectors, attention), (edge_t_to, edge_t_from, weight_t, next_data, prev_data, prev_embedded, margins)
+        return (edge_to, edge_from, weight, feature_vectors, attention), (edge_t_to, edge_t_from, weight_t, next_data, prev_data, prev_embedded, margins), based_epoch
     
     def record_time(self, save_dir, file_name, operation, t):
         file_path = os.path.join(save_dir, file_name+".json")

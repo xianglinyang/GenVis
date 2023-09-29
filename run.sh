@@ -36,13 +36,29 @@
 # # Print completion message
 # echo "All Python scripts have been executed."
 
-# python tdvi_exp.py -c /home/xianglin/data/resnet18_mnist -s estimation-sampling -e 1 1> /home/xianglin/data/resnet18_mnist/vis_log 2>&1
-# python tdvi_exp.py -c /home/xianglin/data/noise/symmetric/resnet18_mnist/10 -s estimation-sampling -e 1 1> /home/xianglin/data/resnet18_mnist/vis_log 2>&1
-# python tdvi_exp.py -c /home/xianglin/data/noise/pairflip/resnet18_mnist/10 -s estimation-sampling -e 1 1> /home/xianglin/data/resnet18_mnist/vis_log 2>&1
-# python tdvi_exp.py -c /home/xianglin/data/corrupted/resnet18_mnist/10 -s estimation-sampling -e 1 1> /home/xianglin/data/resnet18_mnist/vis_log 2>&1
+content_path="/home/xianglin/data/resnet18_mnist"
+python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+content_path="/home/xianglin/data/noise/symmetric/resnet18_mnist/10"
+python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+content_path="/home/xianglin/data/noise/pairflip/resnet18_mnist/10"
+python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+content_path="/home/xianglin/data/corrupted/resnet18_mnist/10"
+python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# cifar10
+content_path="/home/xianglin/data/resnet18_cifar10"
+python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+content_path="/home/xianglin/data/noise/symmetric/resnet18_cifar10/10"
+python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+content_path="/home/xianglin/data/noise/pairflip/resnet18_cifar10/10"
+python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+content_path="/home/xianglin/data/corrupted/resnet18_cifar10/10"
+python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
 
 
-python tdvi_exp.py -c /home/xianglin/data/resnet18_cifar10 -s estimation-sampling -e 1 1> /home/xianglin/data/resnet18_cifar10/vis_log 2>&1
-python tdvi_exp.py -c /home/xianglin/data/noise/symmetric/resnet18_cifar10/10 -s estimation-sampling -e 1 1> /home/xianglin/data/resnet18_cifar10/vis_log 2>&1
-python tdvi_exp.py -c /home/xianglin/data/noise/pairflip/resnet18_cifar10/10 -s estimation-sampling -e 1 1> /home/xianglin/data/resnet18_cifar10/vis_log 2>&1
-python tdvi_exp.py -c /home/xianglin/data/corrupted/resnet18_cifar10/10 -s estimation-sampling -e 1 1> /home/xianglin/data/resnet18_cifar10/vis_log 2>&1

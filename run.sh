@@ -36,29 +36,54 @@
 # # Print completion message
 # echo "All Python scripts have been executed."
 
-content_path="/home/xianglin/data/resnet18_mnist"
+# content_path="/home/xianglin/data/resnet18_mnist"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/noise/symmetric/resnet18_mnist/10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/noise/pairflip/resnet18_mnist/10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/corrupted/resnet18_mnist/10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# # cifar10
+# content_path="/home/xianglin/data/resnet18_cifar10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/noise/symmetric/resnet18_cifar10/10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/noise/pairflip/resnet18_cifar10/10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/corrupted/resnet18_cifar10/10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/convnet_mnist"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/noise/symmetric/convnet_mnist/10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/noise/pairflip/convnet_mnist/10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/corrupted/convnet_mnist/10"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/corrupted/convnet_mnist/10-0.5"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/corrupted/resnet18_cifar10/10-0.5"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+# content_path="/home/xianglin/data/corrupted/resnet18_fmnist/10-0.5"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+
+content_path="/home/xianglin/data/resnet50_cifar100"
 python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
 
-content_path="/home/xianglin/data/noise/symmetric/resnet18_mnist/10"
-python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
-
-content_path="/home/xianglin/data/noise/pairflip/resnet18_mnist/10"
-python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
-
-content_path="/home/xianglin/data/corrupted/resnet18_mnist/10"
-python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
-
-# cifar10
-content_path="/home/xianglin/data/resnet18_cifar10"
-python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
-
-content_path="/home/xianglin/data/noise/symmetric/resnet18_cifar10/10"
-python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
-
-content_path="/home/xianglin/data/noise/pairflip/resnet18_cifar10/10"
-python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
-
-content_path="/home/xianglin/data/corrupted/resnet18_cifar10/10"
-python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
 
 

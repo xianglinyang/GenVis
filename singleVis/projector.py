@@ -90,6 +90,7 @@ class DeepDebuggerProjector(Projector):
         self.vis_model.eval()
         self.current_range = (s, e)
         print("Successfully load the visualization model for range ({},{})...".format(s,e))
+        return self.vis_model
 
 
 class ALProjector(Projector):
@@ -105,6 +106,7 @@ class ALProjector(Projector):
         self.vis_model.to(self.DEVICE)
         self.vis_model.eval()
         print("Successfully load the visualization model for Iteration {}...".format(iteration))
+        return self.vis_model
 
 
 class DenseALProjector(DeepDebuggerProjector):
@@ -139,6 +141,7 @@ class DenseALProjector(DeepDebuggerProjector):
         self.vis_model.eval()
         self.current_range = (iteration, s, e)
         print("Successfully load the visualization model in iteration {} for range ({},{}]...".format(iteration, s,e))
+        return self.vis_model
     
     def batch_project(self, iteration, epoch, data):
         self.load(iteration, epoch)
@@ -191,6 +194,7 @@ class EvalProjector(DeepDebuggerProjector):
         self.vis_model.eval()
         self.current_range = (s, e)
         print("Successfully load the visualization model for range ({},{})...".format(s,e))
+        return self.vis_model
         
 
 class DVIProjector(Projector):
@@ -208,6 +212,7 @@ class DVIProjector(Projector):
         self.vis_model.eval()
         if self.verbose>0:
             print("Successfully load the DVI visualization model for iteration {}".format(iteration))
+        return self.vis_model
 
 
 class TimeVisProjector(Projector):
@@ -223,6 +228,7 @@ class TimeVisProjector(Projector):
         self.vis_model.eval()
         if self.verbose>0:
             print("Successfully load the TimeVis visualization model for iteration {}".format(iteration))
+        return self.vis_model
 
 
 class TimeVisDenseALProjector(Projector):
@@ -242,6 +248,7 @@ class TimeVisDenseALProjector(Projector):
         if self.verbose>0:
             print("Successfully load the TimeVis visualization model for iteration {}".format(iteration))
         self.curr_iteration = iteration
+        return self.vis_model
         
     
     def batch_project(self, iteration, epoch, data):

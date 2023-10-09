@@ -137,7 +137,7 @@ class TD:
         velocity_dynamics = self.velocity_high_dynamics()
         return velocity_dynamics[:, 1:, :] - velocity_dynamics[:, :-1, :]
     
-    def simplify(self, trajectories, time_step, method):
+    def simplify_2(self, trajectories, time_step, method):
         '''Choose from
         1. PCA
         2. UMAP
@@ -187,13 +187,60 @@ class TD:
 
         return embeddings
 
-    def plot_ground_truth(self, embeddings, noise_idxs, colors, save_path=None):
+    def simplify_1(self, trajectories, time_step, method):
+        '''Choose from
+        1. PCA
+        2. UMAP
+        3. interpretable method
+        '''
+        if method == "UMAP":
+            num = len(trajectories)
+            trajectories = trajectories.reshape(num, -1)
+            # Non-linear
+            reducer = umap.UMAP(n_components=1)
+            embeddings = reducer.fit_transform(trajectories)
+        elif method=="PCA":
+            num = len(trajectories)
+            trajectories = trajectories.reshape(num, -1)
+            # Linear
+            reducer = PCA(n_components=1)
+            embeddings = reducer.fit_transform(trajectories)
+        elif method == "length":
+            trajectories = trajectories.reshape(len(trajectories), time_step, -1)
+            movement = np.abs(trajectories[:, 1:, :] - trajectories[:, :-1, :])
+            # scalar
+            embeddings = np.linalg.norm(movement, axis=2).sum(axis=1)
+        elif method == "avg_v":
+            trajectories = trajectories.reshape(len(trajectories), time_step, -1)
+            v = np.abs(trajectories[:, 1:, :] - trajectories[:, :-1, :])
+            embeddings = np.linalg.norm(v, axis=2).sum(axis=1)
+        elif method == "max_v":
+            trajectories = trajectories.reshape(len(trajectories), time_step, -1)
+            v = np.abs(trajectories[:, 1:, :] - trajectories[:, :-1, :])
+            speed = np.linalg.norm(v, axis=2)
+            idxs = speed.argmax(axis=1)
+            embeddings = speed[np.arange(len(v)), idxs]
+        elif method == "net_displacement":
+            trajectories = trajectories.reshape(len(trajectories), time_step, -1)
+            dists = (trajectories[:, -1, :] - trajectories[:, 0, :]).squeeze()
+            embeddings = np.linalg.norm(dists, axis=1).squeeze()
+        elif method == "RoG":
+            trajectories = trajectories.reshape(len(trajectories), time_step, -1)
+            # Radius of Gyration
+            mean_t = trajectories.mean(axis=0)
+            embeddings = np.linalg.norm(np.abs(trajectories-mean_t), axis=(1,2))
+        else:
+            raise TypeError("No method Implemented!")
+
+        return embeddings
+
+    def plot_ground_truth_2(self, embeddings, noise_idxs, colors, save_path=None, cmap="tab10"):
         plt.scatter(
             embeddings[:, 0],
             embeddings[:, 1],
             s=.3,
             c=colors,
-            cmap="tab10"
+            cmap=cmap
             )
         
         plt.scatter(
@@ -206,8 +253,18 @@ class TD:
             plt.show()
         else:
             plt.savefig(save_path)
+
+    def plot_ground_truth_1(self, embeddings, noise_idxs, save_path=None):
+        clean_idxs = np.setxor1d(np.arange(len(embeddings)), noise_idxs) 
+        plt.hist(embeddings[clean_idxs])
+        plt.hist(embeddings[noise_idxs])
+
+        if save_path is None:
+            plt.show()
+        else:
+            plt.savefig(save_path)
     
-    def show_ground_truth(self, trajectories, time_step, noise_idxs, cls, method, colors=None, save_path=None):
+    def show_ground_truth_2(self, trajectories, time_step, noise_idxs, cls, method, colors=None, save_path=None, cmap="tab10"):
         EPOCH_START = self.data_provider.s
         labels = self.data_provider.train_labels(EPOCH_START)
 
@@ -216,16 +273,25 @@ class TD:
 
         target_trajectories =  trajectories[cls_idxs]
         
-        # embedding1 = self.simplify(target_trajectories, time_step, "length")
-        # embedding2 = self.simplify(target_trajectories, time_step, "RoG")
-        # embeddings = np.vstack((embedding1, embedding2)).transpose([1,0])
-        embeddings = self.simplify(target_trajectories, time_step, method)
+        embeddings = self.simplify_2(target_trajectories, time_step, method)
 
         if colors is None:
             paint_colors = [0]*len(target_trajectories)
         else:
             paint_colors = colors[cls_idxs]
-        self.plot_ground_truth(embeddings, mask, paint_colors, save_path=save_path)
+        self.plot_ground_truth_2(embeddings, mask, paint_colors, save_path=save_path, cmap=cmap)
+    
+    def show_ground_truth_1(self, trajectories, time_step, noise_idxs, cls, method, save_path=None):
+        EPOCH_START = self.data_provider.s
+        labels = self.data_provider.train_labels(EPOCH_START)
+
+        cls_idxs = np.argwhere(labels == cls).squeeze()
+        mask = np.isin(cls_idxs, noise_idxs)
+
+        target_trajectories =  trajectories[cls_idxs]
+        
+        embeddings = self.simplify_1(target_trajectories, time_step, method)
+        self.plot_ground_truth_1(embeddings, mask, save_path=save_path)
     
 
     

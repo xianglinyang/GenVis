@@ -164,6 +164,7 @@ if RESUME < EPOCH_START:
     evaluator.save_epoch_eval(EPOCH_START, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
     RESUME = EPOCH_START
 else:
+    # model.load_state_dict(projector.load(RESUME)["state_dict"])
     projector.load(RESUME)
 
 for iteration in range(RESUME+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
@@ -177,7 +178,7 @@ for iteration in range(RESUME+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD
     sampler = DensityAwareSampling()
     spatial_cons = SplitSpatialTemporalEdgeConstructor(data_provider, projector, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
     t0 = time.time()
-    spatial_component, temporal_component = spatial_cons.construct(iteration, ESTIMATED)
+    spatial_component, temporal_component, based_epoch = spatial_cons.construct(iteration, ESTIMATED)
     edge_to, edge_from, weights, feature_vectors, attention = spatial_component
     edge_t_to, edge_t_from, weight_t, next_data, prev_data, prev_embedded, margins = temporal_component
     t1 = time.time()
@@ -191,8 +192,8 @@ for iteration in range(RESUME+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD
     ########################################################################################################################
     #                                                       TRAIN                                                          #
     ########################################################################################################################
+    projector.load(based_epoch)
     trainer = SplitTemporalTrainer(model, criterion, optimizer, lr_scheduler, spatial_edge_loader=spatial_edge_loader, temporal_edge_loader=temporal_edge_loader, DEVICE=DEVICE)
-
     train_epoch, time_spent = trainer.train(PATIENT, MAX_EPOCH)
 
     save_dir = os.path.join(data_provider.model_path, "{}_{}".format(EPOCH_NAME, iteration))

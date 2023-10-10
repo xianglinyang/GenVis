@@ -275,11 +275,15 @@ class TD:
         
         embeddings = self.simplify_2(target_trajectories, time_step, method)
 
+        dists = np.linalg.norm(embeddings, axis=1)
+        ranking = cls_idxs[np.argsort(dists)]
+
         if colors is None:
             paint_colors = [0]*len(target_trajectories)
         else:
             paint_colors = colors[cls_idxs]
         self.plot_ground_truth_2(embeddings, mask, paint_colors, save_path=save_path, cmap=cmap)
+        return ranking
     
     def show_ground_truth_1(self, trajectories, time_step, noise_idxs, cls, method, save_path=None):
         EPOCH_START = self.data_provider.s
@@ -291,7 +295,9 @@ class TD:
         target_trajectories =  trajectories[cls_idxs]
         
         embeddings = self.simplify_1(target_trajectories, time_step, method)
+        ranking = cls_idxs[np.argsort(embeddings)]
         self.plot_ground_truth_1(embeddings, mask, save_path=save_path)
+        return ranking
     
 
     

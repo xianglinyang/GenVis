@@ -256,8 +256,8 @@ class TD:
 
     def plot_ground_truth_1(self, embeddings, noise_idxs, save_path=None):
         clean_idxs = np.setxor1d(np.arange(len(embeddings)), noise_idxs) 
-        plt.hist(embeddings[clean_idxs])
-        plt.hist(embeddings[noise_idxs])
+        plt.hist(embeddings[clean_idxs], bins=50)
+        plt.hist(embeddings[noise_idxs], bins=50)
 
         if save_path is None:
             plt.show()

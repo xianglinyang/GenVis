@@ -13,7 +13,7 @@ from singleVis.vis_models import vis_models as vmodels
 from singleVis.losses import UmapLoss, ReconstructionLoss, SingleVisLoss, TemporalEdgeLoss, splittDVILoss
 from singleVis.edge_dataset import DataHandler, DVIDataHandler, SplitTemporalDataHandler, create_dataloader
 from singleVis.trainer import SingleVisTrainer, SplitTemporalTrainer
-from singleVis.subsampling import DensityAwareSampling
+from singleVis.subsampling import DensityAwareSampling, IdentitySampling
 from singleVis.data import NormalDataProvider
 from singleVis.spatial_edge_constructor import SplitSpatialTemporalEdgeConstructor, SingleEpochSpatialEdgeConstructor
 from singleVis.projector import DVIProjector
@@ -44,6 +44,7 @@ parser.add_argument('--content_path', '-c', type=str)
 parser.add_argument('--setting', '-s', type=str)
 parser.add_argument('--resume', '-r', type=int, default=0)
 parser.add_argument('--estimated', '-e', type=int)
+parser.add_argument('--sampling', type=str, choices=["density", "identity"])
 args = parser.parse_args()
 
 ########################################################################################################################
@@ -53,6 +54,7 @@ CONTENT_PATH = args.content_path
 comment = args.setting
 RESUME = args.resume
 ESTIMATED = args.estimated
+SAMPLING = args.sampling
 
 sys.path.append(CONTENT_PATH)
 with open(os.path.join(CONTENT_PATH, "config.json"), "r") as f:
@@ -92,7 +94,7 @@ MAX_EPOCH = VISUALIZATION_PARAMETER["MAX_EPOCH"]
 # EVALUATION_NAME = VISUALIZATION_PARAMETER["EVALUATION_NAME"]
 # VIS_MODEL = VISUALIZATION_PARAMETER["VIS_MODEL"]
 
-VIS_MODEL_NAME = f"{VIS_METHOD}_{VIS_MODEL}_{comment}"
+VIS_MODEL_NAME = f"{VIS_METHOD}_{VIS_MODEL}_{comment}_{SAMPLING}"
 EVALUATION_NAME = f"evaluation_{VIS_MODEL_NAME}"
 
 # Define hyperparameters
@@ -106,10 +108,10 @@ net = eval("subject_model.{}()".format(NET))
 ########################################################################################################################
 # Define data_provider
 data_provider = NormalDataProvider(CONTENT_PATH, net, EPOCH_START, EPOCH_END, EPOCH_PERIOD, device=DEVICE, classes=CLASSES, epoch_name=EPOCH_NAME, verbose=1)
-if PREPROCESS:
-    data_provider._meta_data()
-    if B_N_EPOCHS >0:
-        data_provider._estimate_boundary(LEN//10, l_bound=L_BOUND)
+# if PREPROCESS:
+#     data_provider._meta_data()
+#     if B_N_EPOCHS >0:
+#         data_provider._estimate_boundary(LEN//10, l_bound=L_BOUND)
 
 # Define visualization models
 model = vmodels[VIS_MODEL](ENCODER_DIMS, DECODER_DIMS)
@@ -140,11 +142,22 @@ evaluator = Evaluator(data_provider, projector, metric="euclidean")
 optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
 
+# Define sampler
+if SAMPLING == "identity":
+    sampler = IdentitySampling()
+elif SAMPLING == "density":
+    sampler = DensityAwareSampling()
+else:
+    raise NotImplementedError("Sampler not implemented!")
+
 if RESUME < EPOCH_START:
+    if PREPROCESS:
+        data_provider._meta_data_single(EPOCH_START)
+        if B_N_EPOCHS >0:
+            data_provider._estimate_boundary_single(LEN//10, l_bound=L_BOUND, n_epoch=EPOCH_START)
 # Define Edge dataset
     t0 = time.time()
 
-    sampler = DensityAwareSampling()
     spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, EPOCH_START, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
     edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
 
@@ -168,6 +181,10 @@ else:
     projector.load(RESUME)
 
 for iteration in range(RESUME+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
+    if PREPROCESS:
+        data_provider._meta_data_single(iteration)
+        if B_N_EPOCHS >0:
+            data_provider._estimate_boundary_single(LEN//10, l_bound=L_BOUND, n_epoch=iteration)
     # Define Criterion
     criterion = splittDVILoss(umap_loss_fn, recon_loss_fn, temporal_loss_fn)
     # Define training parameters
@@ -175,7 +192,6 @@ for iteration in range(RESUME+EPOCH_PERIOD, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
     
     # Define Edge dataset
-    sampler = DensityAwareSampling()
     spatial_cons = SplitSpatialTemporalEdgeConstructor(data_provider, projector, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
     t0 = time.time()
     spatial_component, temporal_component, based_epoch = spatial_cons.construct(iteration, ESTIMATED)

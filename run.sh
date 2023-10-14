@@ -82,8 +82,13 @@
 # content_path="/home/xianglin/data/corrupted/resnet18_fmnist/10-0.5"
 # python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
 
-content_path="/home/xianglin/data/resnet50_cifar100"
-python tdvi_exp.py -c $content_path -s estimation-sampling -e 2 1> $content_path/vis_log 2>&1
+# content_path="/home/xianglin/projects/DVI_data/resnet50_cifar100"
+# python tdvi_exp.py -c $content_path -s estimation-sampling -e 1 1> $content_path/vis_log 2>&1
+
+
+# Exp
+content_path="/home/xianglin/data/convnet_mnist"
+python tdvi_exp.py -c $content_path -s estimation-sampling -e 1 --sampling identity 1> $content_path/vis_log_exp 2>&1
 
 
 

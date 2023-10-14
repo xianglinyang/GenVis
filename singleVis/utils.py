@@ -155,7 +155,7 @@ def get_border_points(model, input_x, confs, predictions, device, num_adv_eg, l_
     return adv_examples, curr_samples, tot_num
 
 
-def batch_run(model, data, batch_size=200):
+def batch_run(model, data, batch_size=2000):
     """batch run, in case memory error"""
     data = data.to(dtype=torch.float)
     output = None

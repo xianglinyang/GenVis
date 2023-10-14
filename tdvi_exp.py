@@ -157,9 +157,9 @@ if RESUME < EPOCH_START:
             data_provider._estimate_boundary_single(LEN//10, l_bound=L_BOUND, n_epoch=EPOCH_START)
 # Define Edge dataset
     t0 = time.time()
-
     spatial_cons = SingleEpochSpatialEdgeConstructor(data_provider, EPOCH_START, S_N_EPOCHS, B_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
     edge_to, edge_from, probs, feature_vectors, attention = spatial_cons.construct()
+    t1 = time.time()
 
     # Construct two dataset and train on them separately
     dataset = DVIDataHandler(edge_to, edge_from, feature_vectors, attention)
@@ -172,6 +172,7 @@ if RESUME < EPOCH_START:
     save_dir = os.path.join(data_provider.model_path, f"{EPOCH_NAME}_{EPOCH_START}")
     trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
     trainer.record_time(data_provider.model_path, "time_{}".format(VIS_MODEL_NAME), "training", EPOCH_START, (train_epoch, time_spent))
+    trainer.record_time(data_provider.model_path, "time_{}".format(VIS_MODEL_NAME), "complex", EPOCH_START, (train_epoch, t1-t0))
 
     vis.savefig(EPOCH_START, f"{VIS_METHOD}_{VIS_MODEL}_{EPOCH_START}_{comment}.png")
     evaluator.save_epoch_eval(EPOCH_START, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))

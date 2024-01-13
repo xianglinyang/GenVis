@@ -55,7 +55,7 @@ class RandomSampling(SubSampling):
     def sampling(self, data):
         num = len(data)
         selected_idxs = np.random.choice(num, int(self.ratio*num), replace=False)
-        if verbose:
+        if self.verbose:
             print(f"Sampling {self.ratio*100}% data points")
         return selected_idxs
     
@@ -78,6 +78,7 @@ class DensityAwareSampling(SubSampling):
         return avg_dists.mean()
     
     def sampling(self, data, threshold=0.25):
+        # TODO binery seach
         avg_dist = self.density_estimation(data, estimated_ratio=0.01, repeat=5)
         ratios = np.array([0.1, 0.2, 0.3, 0.4, 0.5])
         densities = list()

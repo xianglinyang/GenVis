@@ -68,6 +68,16 @@ class TrainerAbstractClass(ABC):
     def record_time(self):
         pass
 
+    @abstractmethod
+    def log(self):
+        pass
+
+    @abstractmethod
+    def read(self):
+        pass
+
+
+
 
 class SingleVisTrainer(TrainerAbstractClass):
     def __init__(self, model, criterion, optimizer, lr_scheduler, edge_loader, DEVICE):
@@ -173,7 +183,6 @@ class SingleVisTrainer(TrainerAbstractClass):
         print("Time spend: {:.2f} for training vis model...".format(time_spend))
         return epoch+1, round(time_spend, 3)
 
-
     def load(self, file_path):
         """
         save all parameters...
@@ -217,6 +226,23 @@ class SingleVisTrainer(TrainerAbstractClass):
             evaluation[key][str(epoch)] = t
         with open(save_file, 'w') as f:
             json.dump(evaluation, f)
+    
+    def log(self, log_dir, epoch):
+        log_path = os.path.join(log_dir, "log.json")
+        curr_log = self.read(log_dir)
+        curr_log.append(epoch)
+        with open(log_path, "w") as f:
+            json.dump(curr_log, f)
+    
+    def read(self, log_dir):
+        log_path = os.path.join(log_dir, "log.json")
+        if os.path.exists(log_path):
+            with open(log_path, "r") as f:
+                curr_log = json.load(f)
+        else:
+            curr_log = list()
+        curr_log.sort()
+        return curr_log
 
 
 class HybridVisTrainer(SingleVisTrainer):

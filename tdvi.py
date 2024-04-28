@@ -20,21 +20,22 @@ from singleVis.projector import DVIProjector
 from singleVis.eval.evaluator import Evaluator
 from singleVis.visualizer import visualizer
 
+from config import load_cfg
+
 '''
 TODO:
 1. weight in umap and temporal loss
 2. density estimation
-3. config to yacs
 4. different negative sampling rate for umap and temporal loss
 '''
 
 ########################################################################################################################
 #                                                     DVI PARAMETERS                                                   #
 ########################################################################################################################
-"""DVI with semantic temporal edges"""
-VIS_METHOD = "tDVI"
+# """DVI with semantic temporal edges"""
+# VIS_METHOD = "tDVI"
 MODE = "DEV" # "DEPLOY"
-VIS_MODEL = 'cnAE'
+# VIS_MODEL = 'cnAE'
 
 ########################################################################################################################
 #                                                     LOAD PARAMETERS                                                  #
@@ -44,7 +45,7 @@ parser.add_argument('--content_path', '-c', type=str)
 parser.add_argument('--setting', '-s', type=str)
 parser.add_argument("--iteration", '-i', type=int)
 parser.add_argument("--resume", '-r', type=int)
-parser.add_argument('--estimated', '-e', type=int)
+parser.add_argument("--vis_method", '-v', type=str)
 args = parser.parse_args()
 
 ########################################################################################################################
@@ -53,47 +54,39 @@ args = parser.parse_args()
 CONTENT_PATH = args.content_path
 comment = args.setting
 ITERATION = args.iteration
-RESUME = args.resume
-ESTIMATED = args.estimated
+VIS_METHOD = args.vis_method
 
 sys.path.append(CONTENT_PATH)
-with open(os.path.join(CONTENT_PATH, "config.json"), "r") as f:
-    config = json.load(f)
-config = config[VIS_METHOD]
+config = load_cfg(os.path.join(CONTENT_PATH, "config", f"{VIS_METHOD}.yaml"))
 
-SETTING = config["SETTING"]
-CLASSES = config["CLASSES"]
-DATASET = config["DATASET"]
-PREPROCESS = config["VISUALIZATION"]["PREPROCESS"]
-GPU_ID = config["GPU"]
-# TODO remove
-GPU_ID = "1"
-EPOCH_START = config["EPOCH_START"]
-EPOCH_END = config["EPOCH_END"]
-EPOCH_PERIOD = config["EPOCH_PERIOD"]
-EPOCH_NAME = config["EPOCH_NAME"]
+SETTING = config.SETTING
+CLASSES = config.CLASSES
+DATASET = config.DATASET
+PREPROCESS = config.VISUALIZATION.PREPROCESS
+GPU_ID = config.GPU
+EPOCH_START = config.EPOCH_START
+EPOCH_END = config.EPOCH_END
+EPOCH_PERIOD = config.EPOCH_PERIOD
+EPOCH_NAME = config.EPOCH_NAME
 
 # Training parameter (subject model)
-TRAINING_PARAMETER = config["TRAINING"]
-NET = TRAINING_PARAMETER["NET"]
-LEN = TRAINING_PARAMETER["train_num"]
+TRAINING_PARAMETER = config.TRAINING
+NET = TRAINING_PARAMETER.NET
+LEN = TRAINING_PARAMETER.train_num
 
 # Training parameter (visualization model)
-VISUALIZATION_PARAMETER = config["VISUALIZATION"]
-LAMBDA = VISUALIZATION_PARAMETER["LAMBDA"]
-B_N_EPOCHS = VISUALIZATION_PARAMETER["BOUNDARY"]["B_N_EPOCHS"]
-L_BOUND = VISUALIZATION_PARAMETER["BOUNDARY"]["L_BOUND"]
-ENCODER_DIMS = VISUALIZATION_PARAMETER["ENCODER_DIMS"]
-DECODER_DIMS = VISUALIZATION_PARAMETER["DECODER_DIMS"]
-S_N_EPOCHS = VISUALIZATION_PARAMETER["S_N_EPOCHS"]
-T_N_EPOCHS = VISUALIZATION_PARAMETER["T_N_EPOCHS"]
-N_NEIGHBORS = VISUALIZATION_PARAMETER["N_NEIGHBORS"]
-PATIENT = VISUALIZATION_PARAMETER["PATIENT"]
-MAX_EPOCH = VISUALIZATION_PARAMETER["MAX_EPOCH"]
-
-# VIS_MODEL_NAME = VISUALIZATION_PARAMETER["VIS_MODEL_NAME"]
-# EVALUATION_NAME = VISUALIZATION_PARAMETER["EVALUATION_NAME"]
-# VIS_MODEL = VISUALIZATION_PARAMETER["VIS_MODEL"]
+VISUALIZATION_PARAMETER = config.VISUALIZATION
+LAMBDA = VISUALIZATION_PARAMETER.LAMBDA
+B_N_EPOCHS = VISUALIZATION_PARAMETER.BOUNDARY.B_N_EPOCHS
+L_BOUND = VISUALIZATION_PARAMETER.BOUNDARY.L_BOUND
+ENCODER_DIMS = VISUALIZATION_PARAMETER.ENCODER_DIMS
+DECODER_DIMS = VISUALIZATION_PARAMETER.DECODER_DIMS
+S_N_EPOCHS = VISUALIZATION_PARAMETER.S_N_EPOCHS
+T_N_EPOCHS = VISUALIZATION_PARAMETER.T_N_EPOCHS
+N_NEIGHBORS = VISUALIZATION_PARAMETER.N_NEIGHBORS
+PATIENT = VISUALIZATION_PARAMETER.PATIENT
+MAX_EPOCH = VISUALIZATION_PARAMETER.MAX_EPOCH
+VIS_MODEL = VISUALIZATION_PARAMETER.VIS_MODEL
 
 VIS_MODEL_NAME = f"{VIS_METHOD}_{VIS_MODEL}_{comment}"
 EVALUATION_NAME = f"evaluation_{VIS_MODEL_NAME}"
@@ -110,9 +103,9 @@ net = eval("subject_model.{}()".format(NET))
 # Define data_provider
 data_provider = NormalDataProvider(CONTENT_PATH, net, EPOCH_START, EPOCH_END, EPOCH_PERIOD, device=DEVICE, classes=CLASSES, epoch_name=EPOCH_NAME, verbose=1)
 if PREPROCESS:
-    data_provider._meta_data()
+    data_provider._meta_data_single(ITERATION)
     if B_N_EPOCHS >0:
-        data_provider._estimate_boundary(LEN//10, l_bound=L_BOUND)
+        data_provider._estimate_boundary_single(LEN//10, l_bound=L_BOUND, n_epoch=ITERATION)
 
 # Define visualization models
 model = vmodels[VIS_MODEL](ENCODER_DIMS, DECODER_DIMS)
@@ -162,10 +155,20 @@ if ITERATION == EPOCH_START:
     save_dir = os.path.join(data_provider.model_path, f"{EPOCH_NAME}_{EPOCH_START}")
     trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
     trainer.record_time(data_provider.model_path, "time_{}".format(VIS_MODEL_NAME), "training", EPOCH_START, (train_epoch, time_spent))
-
+    trainer.log(data_provider.content_path, EPOCH_START)
+    
     vis.savefig(EPOCH_START, f"{VIS_METHOD}_{VIS_MODEL}_{EPOCH_START}_{comment}.png")
     evaluator.save_epoch_eval(EPOCH_START, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
 else:
+    # load resume epoch/iteration
+    # TODO tody up
+    log_path = os.path.join(CONTENT_PATH, "log.json")
+    with open(log_path, "r") as f:
+        curr_log = json.load(f)
+    curr_log.sort()
+    RESUME = curr_log[-1]
+    print(f"Resuming from {RESUME} iterations...")
+    
     projector.load(RESUME)
 
     # Define Criterion
@@ -178,7 +181,7 @@ else:
     sampler = DensityAwareSampling()
     spatial_cons = SplitSpatialTemporalEdgeConstructor(data_provider, projector, S_N_EPOCHS, B_N_EPOCHS, T_N_EPOCHS, N_NEIGHBORS, metric="euclidean", sampler=sampler)
     t0 = time.time()
-    spatial_component, temporal_component = spatial_cons.construct(ITERATION, ESTIMATED)
+    spatial_component, temporal_component = spatial_cons.construct(ITERATION, RESUME)
     edge_to, edge_from, weights, feature_vectors, attention = spatial_component
     edge_t_to, edge_t_from, weight_t, next_data, prev_data, prev_embedded, margins = temporal_component
     t1 = time.time()
@@ -200,6 +203,7 @@ else:
     trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
     trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), operation="training", iteration=str(ITERATION), t=(train_epoch, time_spent))
     trainer.record_time(save_dir=data_provider.model_path, file_name="time_{}".format(VIS_MODEL_NAME), operation="complex", iteration=str(ITERATION), t=(t1-t0))
+    trainer.log(data_provider.content_path, ITERATION)
 
     vis.savefig(ITERATION, f"{VIS_METHOD}_{VIS_MODEL}_{ITERATION}_{comment}.png")
     evaluator.save_epoch_eval(ITERATION, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))

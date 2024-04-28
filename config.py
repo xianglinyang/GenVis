@@ -41,8 +41,6 @@ default_C.VISUALIZATION.S_N_EPOCHS=3
 default_C.VISUALIZATION.T_N_EPOCHS=2
 default_C.VISUALIZATION.PATIENT=3
 default_C.VISUALIZATION.RESOLUTION=300
-default_C.VISUALIZATION.VIS_MODEL_NAME="tDVI_cnAE"
-default_C.VISUALIZATION.EVALUATION_NAME="evaluation_tDVI_cnAE"
 ## Boundary
 default_C.VISUALIZATION.BOUNDARY = CN()
 default_C.VISUALIZATION.BOUNDARY.B_N_EPOCHS=0
@@ -71,6 +69,12 @@ def load_cfg(filepath):
 
 
 if __name__ == "__main__":
+  import argparse
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--path", "-p", type=str, default="config.yaml")
+  args = parser.parse_args()
+  path = args.path
+
   cfg = get_cfg_defaults()
-  save_cfg(cfg, "test.yaml")
+  save_cfg(cfg, path)
 

@@ -99,7 +99,7 @@ class NormalDataProvider(DataProvider):
         except Exception as e:
             return None
 
-    def _meta_data(self):
+    def _meta_data(self, batch_size=200):
         time_inference = list()
         training_data_path = os.path.join(self.content_path, "Training_data")
         training_data = torch.load(os.path.join(training_data_path, "training_dataset_data.pth"),
@@ -127,12 +127,12 @@ class NormalDataProvider(DataProvider):
             # repr_model = torch.nn.Sequential(*(list(self.model.children())[:self.split]))
 
             # training data clustering
-            data_pool_representation = batch_run(repr_model, training_data)
+            data_pool_representation = batch_run(repr_model, training_data, batch_size)
             location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "train_data.npy")
             np.save(location, data_pool_representation)
 
             # test data
-            test_data_representation = batch_run(repr_model, testing_data)
+            test_data_representation = batch_run(repr_model, testing_data, batch_size)
             location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "test_data.npy")
             np.save(location, test_data_representation)
 
@@ -162,7 +162,7 @@ class NormalDataProvider(DataProvider):
         del testing_data
         gc.collect()
     
-    def _meta_data_single(self, n_epoch):
+    def _meta_data_single(self, n_epoch, batch_size=200):
         training_data_path = os.path.join(self.content_path, "Training_data")
         training_data = torch.load(os.path.join(training_data_path, "training_dataset_data.pth"),
                                         map_location="cpu")
@@ -191,12 +191,12 @@ class NormalDataProvider(DataProvider):
         # repr_model = torch.nn.Sequential(*(list(self.model.children())[:self.split]))
 
         # training data clustering
-        data_pool_representation = batch_run(repr_model, training_data)
+        data_pool_representation = batch_run(repr_model, training_data, batch_size)
         location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "train_data.npy")
         np.save(location, data_pool_representation)
 
         # test data
-        test_data_representation = batch_run(repr_model, testing_data)
+        test_data_representation = batch_run(repr_model, testing_data, batch_size)
         location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "test_data.npy")
         np.save(location, test_data_representation)
 
@@ -222,7 +222,7 @@ class NormalDataProvider(DataProvider):
         del testing_data
         gc.collect()
 
-    def _estimate_boundary(self, num, l_bound):
+    def _estimate_boundary(self, num, l_bound, batch_size=200):
         '''
         Preprocessing data. This process includes find_border_points and find_border_centers
         save data for later training
@@ -246,7 +246,7 @@ class NormalDataProvider(DataProvider):
             repr_model = self.feature_function(n_epoch)
 
             t0 = time.time()
-            confs = batch_run(self.model, training_data)
+            confs = batch_run(self.model, training_data, batch_size)
             preds = np.argmax(confs, axis=1).squeeze()
             # TODO how to choose the number of boundary points?
             num_adv_eg = num
@@ -256,7 +256,7 @@ class NormalDataProvider(DataProvider):
 
             # get gap layer data
             border_points = border_points.to(self.DEVICE)
-            border_centers = batch_run(repr_model, border_points)
+            border_centers = batch_run(repr_model, border_points, batch_size)
             location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "border_centers.npy")
             np.save(location, border_centers)
 
@@ -268,7 +268,7 @@ class NormalDataProvider(DataProvider):
 
             # get gap layer data
             border_points = border_points.to(self.DEVICE)
-            border_centers = batch_run(repr_model, border_points)
+            border_centers = batch_run(repr_model, border_points, batch_size)
             location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "test_border_centers.npy")
             np.save(location, border_centers)
 
@@ -292,7 +292,7 @@ class NormalDataProvider(DataProvider):
         with open(save_dir, 'w') as f:
             json.dump(evaluation, f)
     
-    def _estimate_boundary_single(self, num, l_bound, n_epoch):
+    def _estimate_boundary_single(self, num, l_bound, n_epoch, batch_size=200):
         '''
         Preprocessing data. This process includes find_border_points and find_border_centers
         save data for later training
@@ -315,7 +315,7 @@ class NormalDataProvider(DataProvider):
         repr_model = self.feature_function(n_epoch)
 
         t0 = time.time()
-        confs = batch_run(self.model, training_data)
+        confs = batch_run(self.model, training_data, batch_size)
         preds = np.argmax(confs, axis=1).squeeze()
         # TODO how to choose the number of boundary points?
         num_adv_eg = num
@@ -325,7 +325,7 @@ class NormalDataProvider(DataProvider):
 
         # get gap layer data
         border_points = border_points.to(self.DEVICE)
-        border_centers = batch_run(repr_model, border_points)
+        border_centers = batch_run(repr_model, border_points, batch_size)
         location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "border_centers.npy")
         np.save(location, border_centers)
 
@@ -337,7 +337,7 @@ class NormalDataProvider(DataProvider):
 
         # get gap layer data
         border_points = border_points.to(self.DEVICE)
-        border_centers = batch_run(repr_model, border_points)
+        border_centers = batch_run(repr_model, border_points, batch_size)
         location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "test_border_centers.npy")
         np.save(location, border_centers)
 
@@ -574,7 +574,7 @@ class ActiveLearningDataProvider(DataProvider):
         ulb_idx = np.setdiff1d(tot_idx, lb_idx)
         return ulb_idx
 
-    def _meta_data(self, iteration):
+    def _meta_data(self, iteration, batch_size=200):
         training_data_path = os.path.join(self.content_path, "Training_data")
         training_data = torch.load(os.path.join(training_data_path, "training_dataset_data.pth"),
                                         map_location="cpu")
@@ -588,12 +588,12 @@ class ActiveLearningDataProvider(DataProvider):
         repr_model = self.feature_function(iteration)
 
         # training data clustering
-        data_pool_representation = batch_run(repr_model, training_data)
+        data_pool_representation = batch_run(repr_model, training_data, batch_size)
         location = os.path.join(self.model_path, "{}_{:d}".format(self.iteration_name, iteration), "train_data.npy")
         np.save(location, data_pool_representation)
 
         # test data
-        test_data_representation = batch_run(repr_model, testing_data)
+        test_data_representation = batch_run(repr_model, testing_data, batch_size)
         location = os.path.join(self.model_path, "{}_{:d}".format(self.iteration_name, iteration), "test_data.npy")
         np.save(location, test_data_representation)
 
@@ -621,7 +621,7 @@ class ActiveLearningDataProvider(DataProvider):
         del testing_data
         gc.collect()
 
-    def _estimate_boundary(self, iteration, num, l_bound):
+    def _estimate_boundary(self, iteration, num, l_bound, batch_size=200):
         '''
         Preprocessing data. This process includes find_border_points and find_border_centers
         save data for later training
@@ -638,7 +638,7 @@ class ActiveLearningDataProvider(DataProvider):
         repr_model = self.feature_function(iteration)
 
         t0 = time.time()
-        confs = batch_run(self.model, training_data)
+        confs = batch_run(self.model, training_data, batch_size)
         preds = np.argmax(confs, axis=1).squeeze()
         # TODO how to choose the number of boundary points?
         num_adv_eg = num
@@ -647,7 +647,7 @@ class ActiveLearningDataProvider(DataProvider):
 
         # get gap layer data
         border_points = border_points.to(self.DEVICE)
-        border_centers = batch_run(repr_model, border_points)
+        border_centers = batch_run(repr_model, border_points, batch_size)
         location = os.path.join(self.model_path, "{}_{:d}".format(self.iteration_name, iteration), "border_centers.npy")
         np.save(location, border_centers)
 
@@ -659,7 +659,7 @@ class ActiveLearningDataProvider(DataProvider):
 
         # get gap layer data
         border_points = border_points.to(self.DEVICE)
-        border_centers = batch_run(repr_model, border_points)
+        border_centers = batch_run(repr_model, border_points, batch_size)
         location = os.path.join(self.model_path, "{}_{:d}".format(self.iteration_name, iteration), "test_border_centers.npy")
         np.save(location, border_centers)
 
@@ -888,7 +888,7 @@ class DenseActiveLearningDataProvider(ActiveLearningDataProvider):
         except Exception as e:
             return None
 
-    def _meta_data(self, iteration):
+    def _meta_data(self, iteration, batch_size=200):
         time_inference = list()
         training_data_path = os.path.join(self.content_path, "Training_data")
         training_data = torch.load(os.path.join(training_data_path, "training_dataset_data.pth"),
@@ -913,12 +913,12 @@ class DenseActiveLearningDataProvider(ActiveLearningDataProvider):
             repr_model = self.feature_function(iteration, n_epoch)
 
             # training data clustering
-            data_pool_representation = batch_run(repr_model, training_data)
+            data_pool_representation = batch_run(repr_model, training_data, batch_size)
             location = os.path.join(self.model_path, "{}_{}".format(self.iteration_name, iteration), "{}_{:d}".format(self.epoch_name, n_epoch), "train_data.npy")
             np.save(location, data_pool_representation)
 
             # test data
-            test_data_representation = batch_run(repr_model, testing_data)
+            test_data_representation = batch_run(repr_model, testing_data, batch_size)
             location = os.path.join(self.model_path, "{}_{}".format(self.iteration_name, iteration), "{}_{:d}".format(self.epoch_name, n_epoch), "test_data.npy")
             np.save(location, test_data_representation)
 
@@ -945,7 +945,7 @@ class DenseActiveLearningDataProvider(ActiveLearningDataProvider):
         del testing_data
         gc.collect()
 
-    def _estimate_boundary(self, iteration, num, l_bound):
+    def _estimate_boundary(self, iteration, num, l_bound, batch_size=200):
         '''
         Preprocessing data. This process includes find_border_points and find_border_centers
         save data for later training
@@ -965,7 +965,7 @@ class DenseActiveLearningDataProvider(ActiveLearningDataProvider):
             repr_model = self.feature_function(iteration, n_epoch)
 
             t0 = time.time()
-            confs = batch_run(self.model, training_data)
+            confs = batch_run(self.model, training_data, batch_size)
             preds = np.argmax(confs, axis=1).squeeze()
             # TODO how to choose the number of boundary points?
             num_adv_eg = num
@@ -975,7 +975,7 @@ class DenseActiveLearningDataProvider(ActiveLearningDataProvider):
 
             # get gap layer data
             border_points = border_points.to(self.DEVICE)
-            border_centers = batch_run(repr_model, border_points)
+            border_centers = batch_run(repr_model, border_points, batch_size)
             location = os.path.join(self.model_path, "{}_{}".format(self.iteration_name, iteration), "{}_{:d}".format(self.epoch_name, n_epoch), "border_centers.npy")
             np.save(location, border_centers)
 
@@ -987,7 +987,7 @@ class DenseActiveLearningDataProvider(ActiveLearningDataProvider):
 
             # get gap layer data
             border_points = border_points.to(self.DEVICE)
-            border_centers = batch_run(repr_model, border_points)
+            border_centers = batch_run(repr_model, border_points, batch_size)
             location = os.path.join(self.model_path, "{}_{}".format(self.iteration_name, iteration), "{}_{:d}".format(self.epoch_nanme, n_epoch), "test_border_centers.npy")
             np.save(location, border_centers)
 
@@ -1146,7 +1146,7 @@ class DenseActiveLearningDataProvider(ActiveLearningDataProvider):
         fea_fn = self.model.feature
         return fea_fn
 
-    def get_pred(self, iteration, epoch, data):
+    def get_pred(self, iteration, epoch, data, batch_size=200):
         '''
         get the prediction score for data in epoch_id
         :param data: numpy.ndarray
@@ -1157,7 +1157,7 @@ class DenseActiveLearningDataProvider(ActiveLearningDataProvider):
 
         data = torch.from_numpy(data)
         data = data.to(self.DEVICE)
-        pred = batch_run(prediction_func, data)
+        pred = batch_run(prediction_func, data, batch_size)
         return pred
 
     def training_accu(self, iteration, epoch):

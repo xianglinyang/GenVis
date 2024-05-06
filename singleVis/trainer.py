@@ -134,13 +134,13 @@ class SingleVisTrainer(TrainerAbstractClass):
             a_to = a_to.to(device=self.DEVICE, dtype=torch.float32)
             a_from = a_from.to(device=self.DEVICE, dtype=torch.float32)
             
-            # embedding_to, recon_to = self.model(edge_to)
-            # embedding_from, recon_from = self.model(edge_from)
+            embedding_to, recon_to = self.model(edge_to)
+            embedding_from, recon_from = self.model(edge_from)
             
-            # outputs = dict()
-            # outputs["umap"] = (embedding_to, embedding_from)
-            # outputs["recon"] = (recon_to, recon_from)
-            outputs = self.model(edge_to, edge_from)
+            outputs = dict()
+            outputs["umap"] = (embedding_to, embedding_from)
+            outputs["recon"] = (recon_to, recon_from)
+            # outputs = self.model(edge_to, edge_from)
             
             umap_l, recon_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, outputs)
             all_loss.append(loss.item())
@@ -330,7 +330,14 @@ class DVITrainer(SingleVisTrainer):
             a_to = a_to.to(device=self.DEVICE, dtype=torch.float32)
             a_from = a_from.to(device=self.DEVICE, dtype=torch.float32)
 
-            outputs = self.model(edge_to, edge_from)
+            # outputs = self.model(edge_to, edge_from)
+            embedding_to, recon_to = self.model(edge_to)
+            embedding_from, recon_from = self.model(edge_from)
+            
+            outputs = dict()
+            outputs["umap"] = (embedding_to, embedding_from)
+            outputs["recon"] = (recon_to, recon_from)
+            
             umap_l, recon_l, temporal_l, loss = self.criterion(edge_to, edge_from, a_to, a_from, self.model, outputs)
             all_loss.append(loss.item())
             umap_losses.append(umap_l.item())

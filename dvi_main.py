@@ -37,7 +37,7 @@ VIS_METHOD = "dvi" # DeepVisualInsight
 #                                                     LOAD PARAMETERS                                                  #
 ########################################################################################################################
 parser = argparse.ArgumentParser(description='Process hyperparameters...')
-parser.add_argument('--content_path', type=str)
+parser.add_argument('--content_path', '-c', type=str)
 args = parser.parse_args()
 
 CONTENT_PATH = args.content_path

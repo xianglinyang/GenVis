@@ -20,10 +20,11 @@ from singleVis.spatial_edge_constructor import kcSpatialEdgeConstructor
 from singleVis.temporal_edge_constructor import GlobalTemporalEdgeConstructor
 from singleVis.projector import TimeVisProjector
 from singleVis.eval.evaluator import Evaluator
+from config import load_cfg
 ########################################################################################################################
 #                                                    VISUALIZATION SETTING                                             #
 ########################################################################################################################
-VIS_METHOD= "TimeVis"
+VIS_METHOD= "timevis"
 ########################################################################################################################
 #                                                     LOAD PARAMETERS                                                  #
 ########################################################################################################################
@@ -33,48 +34,45 @@ args = parser.parse_args()
 
 CONTENT_PATH = args.content_path
 sys.path.append(CONTENT_PATH)
-with open(os.path.join(CONTENT_PATH, "config.json"), "r") as f:
-    config = json.load(f)
-config = config[VIS_METHOD]
+config = load_cfg(os.path.join(CONTENT_PATH, "config", f"{VIS_METHOD}.yaml"))
 
-# record output information
-# now = time.strftime("%Y-%m-%d-%H_%M_%S", time.localtime(time.time())) 
-# sys.stdout = open(os.path.join(CONTENT_PATH, now+".txt"), "w")
-
-SETTING = config["SETTING"]
-CLASSES = config["CLASSES"]
-DATASET = config["DATASET"]
-PREPROCESS = config["VISUALIZATION"]["PREPROCESS"]
-GPU_ID = config["GPU"]
-EPOCH_START = config["EPOCH_START"]
-EPOCH_END = config["EPOCH_END"]
-EPOCH_PERIOD = config["EPOCH_PERIOD"]
-EPOCH_NAME = config["EPOCH_NAME"]
+SETTING = config.SETTING
+CLASSES = config.CLASSES
+DATASET = config.DATASET
+PREPROCESS = config.VISUALIZATION.PREPROCESS
+GPU_ID = config.GPU
+EPOCH_START = config.EPOCH_START
+EPOCH_END = config.EPOCH_END
+EPOCH_PERIOD = config.EPOCH_PERIOD
+EPOCH_NAME = config.EPOCH_NAME
 
 # Training parameter (subject model)
-TRAINING_PARAMETER = config["TRAINING"]
-NET = TRAINING_PARAMETER["NET"]
-LEN = TRAINING_PARAMETER["train_num"]
+TRAINING_PARAMETER = config.TRAINING
+NET = TRAINING_PARAMETER.NET
+LEN = TRAINING_PARAMETER.train_num
+
 
 # Training parameter (visualization model)
-VISUALIZATION_PARAMETER = config["VISUALIZATION"]
-LAMBDA = VISUALIZATION_PARAMETER["LAMBDA"]
-B_N_EPOCHS = VISUALIZATION_PARAMETER["BOUNDARY"]["B_N_EPOCHS"]
-L_BOUND = VISUALIZATION_PARAMETER["BOUNDARY"]["L_BOUND"]
-INIT_NUM = VISUALIZATION_PARAMETER["INIT_NUM"]
-ALPHA = VISUALIZATION_PARAMETER["ALPHA"]
-BETA = VISUALIZATION_PARAMETER["BETA"]
-# MAX_HAUSDORFF = VISUALIZATION_PARAMETER["MAX_HAUSDORFF"]
-ENCODER_DIMS = VISUALIZATION_PARAMETER["ENCODER_DIMS"]
-DECODER_DIMS = VISUALIZATION_PARAMETER["DECODER_DIMS"]
-S_N_EPOCHS = VISUALIZATION_PARAMETER["S_N_EPOCHS"]
-T_N_EPOCHS = VISUALIZATION_PARAMETER["T_N_EPOCHS"]
-N_NEIGHBORS = VISUALIZATION_PARAMETER["N_NEIGHBORS"]
-PATIENT = VISUALIZATION_PARAMETER["PATIENT"]
-MAX_EPOCH = VISUALIZATION_PARAMETER["MAX_EPOCH"]
+VISUALIZATION_PARAMETER = config.VISUALIZATION
+SAVE_BATCH_SIZE = VISUALIZATION_PARAMETER.SAVE_BATCH_SIZE
+LAMBDA = VISUALIZATION_PARAMETER.LAMBDA
+B_N_EPOCHS = VISUALIZATION_PARAMETER.BOUNDARY.B_N_EPOCHS
+L_BOUND = VISUALIZATION_PARAMETER.BOUNDARY.L_BOUND
+ENCODER_DIMS = VISUALIZATION_PARAMETER.ENCODER_DIMS
+DECODER_DIMS = VISUALIZATION_PARAMETER.DECODER_DIMS
+S_N_EPOCHS = VISUALIZATION_PARAMETER.S_N_EPOCHS
+T_N_EPOCHS = VISUALIZATION_PARAMETER.T_N_EPOCHS
+N_NEIGHBORS = VISUALIZATION_PARAMETER.N_NEIGHBORS
+PATIENT = VISUALIZATION_PARAMETER.PATIENT
+MAX_EPOCH = VISUALIZATION_PARAMETER.MAX_EPOCH
+METRIC = VISUALIZATION_PARAMETER.METRIC
 
-VIS_MODEL_NAME = VISUALIZATION_PARAMETER["VIS_MODEL_NAME"]
-EVALUATION_NAME = VISUALIZATION_PARAMETER["EVALUATION_NAME"]
+INIT_NUM = VISUALIZATION_PARAMETER.INIT_NUM
+ALPHA = VISUALIZATION_PARAMETER.ALPHA
+BETA = VISUALIZATION_PARAMETER.BETA
+
+VIS_MODEL_NAME = f"{VIS_METHOD}"
+EVALUATION_NAME = f"evaluation_{VIS_MODEL_NAME}"
 
 SEGMENTS = [(EPOCH_START, EPOCH_END)]
 
@@ -89,9 +87,9 @@ net = eval("subject_model.{}()".format(NET))
 ########################################################################################################################
 data_provider = NormalDataProvider(CONTENT_PATH, net, EPOCH_START, EPOCH_END, EPOCH_PERIOD, device=DEVICE, classes=CLASSES, epoch_name=EPOCH_NAME, verbose=1)
 if PREPROCESS:
-    data_provider._meta_data()
+    data_provider._meta_data(batch_size=SAVE_BATCH_SIZE)
     if B_N_EPOCHS >0:
-        data_provider._estimate_boundary(LEN//10, l_bound=L_BOUND)
+        data_provider._estimate_boundary(LEN//10, l_bound=L_BOUND, batch_size=SAVE_BATCH_SIZE)
 
 
 model = VisModel(ENCODER_DIMS, DECODER_DIMS)
@@ -103,7 +101,7 @@ projector = TimeVisProjector(vis_model=model, content_path=CONTENT_PATH, vis_mod
 negative_sample_rate = 5
 min_dist = .1
 _a, _b = find_ab_params(1.0, min_dist)
-umap_loss_fn = UmapLoss(negative_sample_rate, DEVICE, _a, _b, repulsion_strength=1.0)
+umap_loss_fn = UmapLoss(negative_sample_rate, _a, _b, repulsion_strength=1.0)
 recon_loss_fn = ReconstructionLoss(beta=1.0)
 criterion = SingleVisLoss(umap_loss_fn, recon_loss_fn, lambd=LAMBDA)
 
@@ -111,7 +109,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=.01, weight_decay=1e-5)
 lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=.1)
 
 t0 = time.time()
-spatial_cons = kcSpatialEdgeConstructor(data_provider=data_provider, init_num=INIT_NUM, s_n_epochs=S_N_EPOCHS, b_n_epochs=B_N_EPOCHS, n_neighbors=N_NEIGHBORS,metric="cosine", MAX_HAUSDORFF=None, ALPHA=ALPHA, BETA=BETA)
+spatial_cons = kcSpatialEdgeConstructor(data_provider=data_provider, init_num=INIT_NUM, s_n_epochs=S_N_EPOCHS, b_n_epochs=B_N_EPOCHS, n_neighbors=N_NEIGHBORS,metric=METRIC, MAX_HAUSDORFF=None, ALPHA=ALPHA, BETA=BETA)
 s_edge_to, s_edge_from, s_probs, feature_vectors, time_step_nums, time_step_idxs_list, knn_indices, sigmas, rhos, attention = spatial_cons.construct()
 temporal_cons = GlobalTemporalEdgeConstructor(X=feature_vectors, time_step_nums=time_step_nums, sigmas=sigmas, rhos=rhos, n_neighbors=N_NEIGHBORS, n_epochs=T_N_EPOCHS)
 t_edge_to, t_edge_from, t_probs = temporal_cons.construct()
@@ -145,8 +143,8 @@ trainer.train(PATIENT, MAX_EPOCH)
 t3 = time.time()
 
 save_dir = data_provider.model_path
-trainer.record_time(save_dir, "time_{}.json".format(VIS_MODEL_NAME), "complex_construction", t1-t0)
-trainer.record_time(save_dir, "time_{}.json".format(VIS_MODEL_NAME), "training", t3-t2)
+trainer.record_time(save_dir, "time_{}.json".format(VIS_MODEL_NAME), "complex_construction", "all", t1-t0)
+trainer.record_time(save_dir, "time_{}.json".format(VIS_MODEL_NAME), "training", "all", t3-t2)
 trainer.save(save_dir=save_dir, file_name="{}".format(VIS_MODEL_NAME))
 
 ########################################################################################################################
@@ -159,7 +157,8 @@ save_dir = os.path.join(data_provider.content_path, "img")
 os.makedirs(save_dir, exist_ok=True)
 
 for i in range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD):
-    vis.save_default_fig(i, path=os.path.join(save_dir, "{}_{}_{}.png".format(DATASET, i, VIS_METHOD)))
+    # vis.savefig(i, path=os.path.join(save_dir, "{}_{}.png".format(VIS_METHOD, i)))
+    vis.savefig(i, "{}_{}.png".format(VIS_METHOD, i))
 
 ########################################################################################################################
 #                                                       EVALUATION                                                     #

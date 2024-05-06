@@ -44,7 +44,6 @@ CONTENT_PATH = args.content_path
 sys.path.append(CONTENT_PATH)
 
 config = load_cfg(os.path.join(CONTENT_PATH, "config", f"{VIS_METHOD}.yaml"))
-print(config)
 
 SETTING = config.SETTING
 CLASSES = config.CLASSES

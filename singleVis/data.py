@@ -112,14 +112,11 @@ class NormalDataProvider(DataProvider):
 
         for n_epoch in range(self.s, self.e + 1, self.p):
             t_s = time.time()
-
-            # make it possible to choose a subset of testing data for testing
-            test_index_file = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "test_index.json")
-            if os.path.exists(test_index_file):
-                test_index = load_labelled_data_index(test_index_file)
-            else:
-                test_index = range(len(testing_data))
-            testing_data = testing_data[test_index]
+            # # make it possible to choose a subset of testing data for testing
+            # test_index_file = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "test_index.json")
+            # if os.path.exists(test_index_file):
+            #     test_index = load_labelled_data_index(test_index_file)
+            #     testing_data = testing_data[test_index]
 
             model_location = os.path.join(self.model_path, "{}_{:d}".format(self.epoch_name, n_epoch), "subject_model.pth")
             self.model.load_state_dict(torch.load(model_location, map_location=torch.device("cpu")))
@@ -155,6 +152,8 @@ class NormalDataProvider(DataProvider):
             f = open(save_dir, "r")
             evaluation = json.load(f)
             f.close()
+        if "data_inference" not in evaluation.keys():
+            evaluation["data_inference"] = list()
         evaluation["data_inference"].append(round(sum(time_inference) / len(time_inference), 3))
         with open(save_dir, 'w') as f:
             json.dump(evaluation, f)

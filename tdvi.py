@@ -41,7 +41,7 @@ VIS_METHOD = "tdvi"
 parser = argparse.ArgumentParser(description='Process hyperparameters...')
 parser.add_argument('--content_path', '-c', type=str)
 parser.add_argument("--iteration", '-i', type=int)
-parser.add_argument("--resume", '-r', type=int)
+parser.add_argument("--resume", '-r', type=int, default=-1)
 args = parser.parse_args()
 
 ########################################################################################################################
@@ -49,6 +49,7 @@ args = parser.parse_args()
 ########################################################################################################################
 CONTENT_PATH = args.content_path
 ITERATION = args.iteration
+RESUME = args.resume
 
 sys.path.append(CONTENT_PATH)
 config = load_cfg(os.path.join(CONTENT_PATH, "config", f"{VIS_METHOD}.yaml"))
@@ -155,13 +156,13 @@ if ITERATION == EPOCH_START:
     evaluator.save_epoch_eval(EPOCH_START, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))
 else:
     # load resume epoch/iteration
-    # TODO tody up
-    log_path = os.path.join(CONTENT_PATH, "log.json")
-    with open(log_path, "r") as f:
-        curr_log = json.load(f)
-    curr_log.sort()
-    RESUME = curr_log[-1]
-    print(f"Resuming from {RESUME} iterations...")
+    if RESUME < 0:
+        log_path = os.path.join(CONTENT_PATH, "log.json")
+        with open(log_path, "r") as f:
+            curr_log = json.load(f)
+        curr_log.sort()
+        RESUME = curr_log[-1]
+        print(f"Resuming from {RESUME} iterations...")
     
     projector.load(RESUME)
 

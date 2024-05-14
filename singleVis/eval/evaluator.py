@@ -977,12 +977,12 @@ class Evaluator(EvaluatorAbstractClass):
             evaluation["temporal_test_mean"] = dict()
 
         epoch_key = str(n_epoch)
-        # if epoch_key not in evaluation["nn_train"]:
-        #     evaluation["nn_train"][epoch_key] = dict()
-        # evaluation["nn_train"][epoch_key][n_key] = self.eval_nn_train(n_epoch, n_neighbors)
-        # if epoch_key not in evaluation["nn_test"]:
-        #     evaluation["nn_test"][epoch_key] = dict()
-        # evaluation["nn_test"][epoch_key][n_key] = self.eval_nn_test(n_epoch, n_neighbors)
+        if epoch_key not in evaluation["nn_train"]:
+            evaluation["nn_train"][epoch_key] = dict()
+        evaluation["nn_train"][epoch_key][n_key] = self.eval_nn_train(n_epoch, n_neighbors)
+        if epoch_key not in evaluation["nn_test"]:
+            evaluation["nn_test"][epoch_key] = dict()
+        evaluation["nn_test"][epoch_key][n_key] = self.eval_nn_test(n_epoch, n_neighbors)
 
         if epoch_key not in evaluation["trustworthiness_train"]:
             evaluation["trustworthiness_train"][epoch_key] = dict()
@@ -998,8 +998,8 @@ class Evaluator(EvaluatorAbstractClass):
         #     evaluation["b_test"][epoch_key] = dict()
         # evaluation["b_test"][epoch_key][n_key] = self.eval_b_test(n_epoch, n_neighbors)
 
-        # evaluation["ppr_train"][epoch_key] = self.eval_inv_train(n_epoch)
-        # evaluation["ppr_test"][epoch_key] = self.eval_inv_test(n_epoch)
+        evaluation["ppr_train"][epoch_key] = self.eval_inv_train(n_epoch)
+        evaluation["ppr_test"][epoch_key] = self.eval_inv_test(n_epoch)
 
         # evaluation["ppr_dist_train"][epoch_key] = self.eval_inv_dist_train(n_epoch)
         # evaluation["ppr_dist_test"][epoch_key] = self.eval_inv_dist_test(n_epoch)
@@ -1016,8 +1016,8 @@ class Evaluator(EvaluatorAbstractClass):
         evaluation["tnn_test"][epoch_key][str(temporal_k)] = self.eval_temporal_nn_test(n_epoch, temporal_k)
 
         # global temporal ranking
-        evaluation["tr_train"][epoch_key] = self.eval_temporal_global_corr_train(n_epoch)
-        evaluation["tr_test"][epoch_key] = self.eval_temporal_global_corr_test(n_epoch)
+        # evaluation["tr_train"][epoch_key] = self.eval_temporal_global_corr_train(n_epoch)
+        # evaluation["tr_test"][epoch_key] = self.eval_temporal_global_corr_test(n_epoch)
 
         # global temporal ranking
         if loss_corr:

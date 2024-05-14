@@ -163,7 +163,7 @@ for i in range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD):
 ########################################################################################################################
 #                                                       EVALUATION                                                     #
 ########################################################################################################################
-eval_epochs = range(EPOCH_START, EPOCH_END, EPOCH_PERIOD)
+eval_epochs = range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD)
 evaluator = Evaluator(data_provider, projector, METRIC)
 for eval_epoch in eval_epochs:
     evaluator.save_epoch_eval(eval_epoch, 15, temporal_k=5, file_name="{}".format(EVALUATION_NAME))

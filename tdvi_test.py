@@ -112,9 +112,9 @@ from singleVis.eval.evaluator import Evaluator
 
 eval_epochs = range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD)
 if EPOCH_END==200:
-    eval_epochs = [1, 50, 100, 150, 200]
+    eval_epochs = [1, 100, 200]
 else:
-    eval_epochs = [1, 5, 10, 15, 20]
+    eval_epochs = [1, 10, 20]
 evaluator = Evaluator(data_provider, projector, METRIC)
 for eval_epoch in eval_epochs:
     evaluator.save_epoch_eval(eval_epoch, 15, temporal_k=5, loss_corr=True, file_name="{}".format(EVALUATION_NAME))

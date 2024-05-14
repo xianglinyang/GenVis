@@ -90,22 +90,22 @@ projector = DVIProjector(vis_model=model, content_path=CONTENT_PATH, epoch_name=
 #                                                      VISUALIZATION                                                   #
 ########################################################################################################################
 from singleVis.visualizer import visualizer
-# vis = visualizer(data_provider, projector, 200, "tab10")
-# save_dir = os.path.join(data_provider.content_path, "img")
-# if not os.path.exists(save_dir):
-#     os.mkdir(save_dir)
-# for i in range(EPOCH_START, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
-#     vis.savefig(i, "{}_{}.png".format(VIS_METHOD, i))
+vis = visualizer(data_provider, projector, 200, "tab10")
+save_dir = os.path.join(data_provider.content_path, "img")
+if not os.path.exists(save_dir):
+    os.mkdir(save_dir)
+for i in range(EPOCH_START, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD):
+    vis.savefig(i, "{}_{}.png".format(VIS_METHOD, i))
 
     
 ########################################################################################################################
 #                                                       EVALUATION                                                     #
 ########################################################################################################################
-eval_epochs = range(EPOCH_START, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD)
+# eval_epochs = range(EPOCH_START, EPOCH_END+EPOCH_PERIOD, EPOCH_PERIOD)
 if EPOCH_END==200:
-    eval_epochs = [1, 50, 100, 150, 200]
+    eval_epochs = [1, 100, 200]
 else:
-    eval_epochs = [1, 5, 10, 15, 20]
+    eval_epochs = [1, 10, 20]
 
 evaluator = Evaluator(data_provider, projector, metric=METRIC)
 

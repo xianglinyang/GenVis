@@ -440,7 +440,7 @@ class Evaluator(EvaluatorAbstractClass):
         corrs = np.zeros(LEN)
         ps = np.zeros(LEN)
         for i in range(LEN):
-            roc_loss = losses[i, 1:, 0]-losses[i, :-1, 0]
+            roc_loss = losses[i, 1:]-losses[i, :-1]
             roc_low_dist = np.linalg.norm(low_repr[i, 1:, :]-low_repr[i, :-1, :], axis=1)
         
             corr, p = stats.spearmanr(roc_loss, roc_low_dist)
@@ -472,10 +472,10 @@ class Evaluator(EvaluatorAbstractClass):
         # rate of change in low dimensional space, 
         # roc_low_dists = np.linalg.norm(low_repr[:, 1:, :]-low_repr[:, :-1, :])
 
-        corrs = np.zeros(LEN)
-        ps = np.zeros(LEN)
-        for i in range(LEN):
-            roc_loss = losses[i, 1:, 0]-losses[i, :-1, 0]
+        corrs = np.zeros(TEST_LEN)
+        ps = np.zeros(TEST_LEN)
+        for i in range(TEST_LEN):
+            roc_loss = losses[i, 1:]-losses[i, :-1]
             roc_low_dist = np.linalg.norm(low_repr[i, 1:, :]-low_repr[i, :-1, :], axis=1)
         
             corr, p = stats.spearmanr(roc_loss, roc_low_dist)
@@ -986,10 +986,10 @@ class Evaluator(EvaluatorAbstractClass):
 
         if epoch_key not in evaluation["trustworthiness_train"]:
             evaluation["trustworthiness_train"][epoch_key] = dict()
-        evaluation["trustworthiness_train"][epoch_key][n_key] = self.eval_nn_train(n_epoch, n_neighbors)
+        evaluation["trustworthiness_train"][epoch_key][n_key] = self.eval_trustworthiness_train(n_epoch, n_neighbors)
         if epoch_key not in evaluation["trustworthiness_test"]:
             evaluation["trustworthiness_test"][epoch_key] = dict()
-        evaluation["trustworthiness_test"][epoch_key][n_key] = self.eval_nn_test(n_epoch, n_neighbors)
+        evaluation["trustworthiness_test"][epoch_key][n_key] = self.eval_trustworthiness_test(n_epoch, n_neighbors)
 
         # if epoch_key not in evaluation["b_train"]:
         #     evaluation["b_train"][epoch_key] = dict()

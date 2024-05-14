@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from pynndescent import NNDescent
 from sklearn.neighbors import NearestNeighbors
+from sklearn.manifold import trustworthiness
 from scipy.stats import spearmanr, pearsonr, rankdata
 
 

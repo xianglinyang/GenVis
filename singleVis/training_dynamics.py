@@ -33,15 +33,21 @@ class TD:
         else:
             self.range = range
 
-    def loss_dynamics(self):
+    def loss_dynamics(self, train=True):
         EPOCH_START, EPOCH_END, EPOCH_PERIOD = self.range
-        labels = self.data_provider.train_labels(EPOCH_START)
+        if train:
+            labels = self.data_provider.train_labels(EPOCH_START)
+        else:
+            labels = self.data_provider.test_labels(EPOCH_START)
 
         # epoch, num, 1
         losses = None
 
         for epoch in range(EPOCH_START, EPOCH_END+1, EPOCH_PERIOD):
-            representation = self.data_provider.train_representation(epoch)
+            if train:
+                representation = self.data_provider.train_representation(epoch)
+            else:
+                representation = self.data_provider.test_representation(epoch)
             pred = self.data_provider.get_pred(epoch, representation)
 
             loss = cross_entropy(pred, labels)

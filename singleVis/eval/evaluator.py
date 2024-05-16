@@ -1016,8 +1016,8 @@ class Evaluator(EvaluatorAbstractClass):
         evaluation["tnn_test"][epoch_key][str(temporal_k)] = self.eval_temporal_nn_test(n_epoch, temporal_k)
 
         # global temporal ranking
-        # evaluation["tr_train"][epoch_key] = self.eval_temporal_global_corr_train(n_epoch)
-        # evaluation["tr_test"][epoch_key] = self.eval_temporal_global_corr_test(n_epoch)
+        evaluation["tr_train"][epoch_key] = self.eval_temporal_global_corr_train(n_epoch)
+        evaluation["tr_test"][epoch_key] = self.eval_temporal_global_corr_test(n_epoch)
 
         # global temporal ranking
         if loss_corr:

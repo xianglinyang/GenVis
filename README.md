@@ -4,7 +4,7 @@ A live-update visualization method for monitoring the training process of DNNs!
 <!-- <strong>DeepDebugger: An Interactive Time-Travelling Debugging Approach for Deep Classifiers</strong> -->
 
 <p align="left">
-    <a href=''>
+    <a href='http://arxiv.org/abs/2405.15135'>
       <img src='https://img.shields.io/badge/Paper-PDF-green?style=flat&logo=arXiv&logoColor=green' alt='Paper PDF'>
     </a>
   </p>
